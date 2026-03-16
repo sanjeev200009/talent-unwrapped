@@ -2,20 +2,62 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import EditionFormUI from '../components/EditionFormUI';
 import EditionCard from '../components/EditionCard';
+import { editionsAPI } from '../lib/api';
 
-const MOCK_EDITIONS = [
-  { id: '1', name: 'Singapore Edition', location: 'Singapore', date: 'Oct 2024', status: 'live' },
-  { id: '2', name: 'Dubai Edition', location: 'Dubai, UAE', date: 'Dec 2024', status: 'live' },
-  { id: '3', name: 'Colombo Edition', location: 'Sri Lanka', date: 'Jan 2025', status: 'draft' },
-  { id: '4', name: 'Riyadh Special', location: 'Saudi Arabia', date: 'May 2024', status: 'archived' },
-];
+interface Edition {
+  id: string;
+  name: string;
+  location: string;
+  date: string;
+  status: 'draft' | 'live' | 'archived';
+}
 
 const EditEdition: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [searchQuery, setSearchQuery] = useState('');
+  const [editions, setEditions] = useState<Edition[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleArchive = (archiveId: string) => {
-    console.log(`Archiving edition ${archiveId}`);
+  useEffect(() => {
+    if (!id) {
+      loadEditions();
+    }
+  }, [id]);
+
+  const loadEditions = async () => {
+    try {
+      setLoading(true);
+      const data = await editionsAPI.getAll();
+      setEditions(data);
+    } catch (err) {
+      console.error('Failed to load editions:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleArchive = async (archiveId: string) => {
+    try {
+      const edition = editions.find(e => e.id === archiveId);
+      if (edition) {
+        await editionsAPI.update(archiveId, { ...edition, status: 'archived' });
+        loadEditions();
+      }
+    } catch (err) {
+      console.error('Failed to archive edition:', err);
+    }
+  };
+
+  const handleRestore = async (restoreId: string) => {
+    try {
+      const edition = editions.find(e => e.id === restoreId);
+      if (edition) {
+        await editionsAPI.update(restoreId, { ...edition, status: 'live' });
+        loadEditions();
+      }
+    } catch (err) {
+      console.error('Failed to restore edition:', err);
+    }
   };
 
   useEffect(() => {
@@ -24,13 +66,19 @@ const EditEdition: React.FC = () => {
     }
   }, [id]);
 
-  // If we have an ID, render the actual form to edit it
   if (id) {
-    return <EditionFormUI isEditing={true} />;
+    return <EditionFormUI isEditing={true} editionId={id} />;
   }
 
-  // Otherwise, render the list to select what to edit
-  const activeEditions = MOCK_EDITIONS.filter(edition => edition.status !== 'archived');
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-muted-foreground">Loading editions...</div>
+      </div>
+    );
+  }
+
+  const activeEditions = editions.filter(edition => edition.status !== 'archived');
 
   const filteredEditions = activeEditions.filter(edition => {
     const query = searchQuery.toLowerCase();
@@ -67,6 +115,7 @@ const EditEdition: React.FC = () => {
               key={edition.id}
               {...edition}
               onArchive={handleArchive}
+              onRestore={handleRestore}
             />
           ))}
         </div>

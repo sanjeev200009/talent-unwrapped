@@ -1,20 +1,56 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import EditionCard from '../components/EditionCard';
+import { editionsAPI } from '../lib/api';
 
-const MOCK_EDITIONS = [
-  { id: '1', name: 'Singapore Edition', location: 'Singapore', date: 'Oct 2024', status: 'live' },
-  { id: '2', name: 'Dubai Edition', location: 'Dubai, UAE', date: 'Dec 2024', status: 'live' },
-  { id: '3', name: 'Colombo Edition', location: 'Sri Lanka', date: 'Jan 2025', status: 'draft' },
-  { id: '4', name: 'Riyadh Special', location: 'Saudi Arabia', date: 'May 2024', status: 'archived' },
-];
+interface Edition {
+  id: string;
+  name: string;
+  location: string;
+  date: string;
+  status: 'draft' | 'live' | 'archived';
+}
 
 const ArchivedEditions: React.FC = () => {
-  const archivedEditions = MOCK_EDITIONS.filter(edition => edition.status === 'archived');
+  const [editions, setEditions] = useState<Edition[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleRestore = (id: string) => {
-    console.log(`Restoring edition ${id}`);
-    // Future backend logic will go here to update status back to 'draft' or 'live'
+  useEffect(() => {
+    loadEditions();
+  }, []);
+
+  const loadEditions = async () => {
+    try {
+      setLoading(true);
+      const data = await editionsAPI.getAll();
+      setEditions(data);
+    } catch (err) {
+      console.error('Failed to load editions:', err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const archivedEditions = editions.filter(edition => edition.status === 'archived');
+
+  const handleRestore = async (id: string) => {
+    try {
+      const edition = editions.find(e => e.id === id);
+      if (edition) {
+        await editionsAPI.update(id, { ...edition, status: 'live' });
+        loadEditions();
+      }
+    } catch (err) {
+      console.error('Failed to restore edition:', err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 md:space-y-16 animate-fade-in">

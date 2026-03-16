@@ -1,6 +1,5 @@
 import React from 'react';
-import { Archive, ExternalLink, Edit2, MoreVertical, RotateCcw } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Archive, Edit2, MoreVertical, RotateCcw } from 'lucide-react';
 
 interface EditionCardProps {
   id: string;
@@ -36,18 +35,15 @@ const EditionCard: React.FC<EditionCardProps> = ({ id, name, location, date, sta
       </div>
 
       <div className="flex flex-wrap items-center gap-3 md:gap-5 mt-auto">
-        <Link 
-          to={`/edition/edit/${id}`} 
-          className="btn-card-action !py-4 md:!py-5 text-xs md:text-sm min-w-fit"
+        <button 
+          title="Edit"
+          onClick={() => window.location.href = `/edition/edit/${id}`}
+          className="flex items-center justify-center flex-1 sm:flex-none gap-2 p-3 md:p-4 min-w-[50px] min-h-[50px] md:min-w-[60px] md:min-h-[60px] bg-white/5 hover:bg-white/10 rounded-xl text-muted-foreground hover:text-white transition-all border border-white/5 hover:border-[#7bb302]/30"
         >
-          <Edit2 size={16} />
-          <span className="hidden xs:block">Edit Edition</span>
-          <span className="xs:hidden">Edit</span>
-        </Link>
+          <Edit2 size={18} />
+          <span className="hidden xs:block text-xs">Edit</span>
+        </button>
         <div className="flex gap-3 md:gap-5">
-          <button className="flex items-center justify-center p-3 md:p-4 min-w-[50px] min-h-[50px] md:min-w-[60px] md:min-h-[60px] bg-white/5 hover:bg-white/10 rounded-xl text-muted-foreground hover:text-white transition-all border border-white/5 group-hover:border-[#7bb302]/30 shrink-0">
-            <ExternalLink size={18} />
-          </button>
           {status !== 'archived' && (
             <button 
               title="Archive" 

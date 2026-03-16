@@ -1,23 +1,67 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import EditionCard from '../components/EditionCard';
+import { editionsAPI } from '../lib/api';
 
-const MOCK_EDITIONS = [
-  { id: '1', name: 'Singapore Edition', location: 'Singapore', date: 'Oct 2024', status: 'live' },
-  { id: '2', name: 'Dubai Edition', location: 'Dubai, UAE', date: 'Dec 2024', status: 'live' },
-  { id: '3', name: 'Colombo Edition', location: 'Sri Lanka', date: 'Jan 2025', status: 'draft' },
-  { id: '4', name: 'Riyadh Special', location: 'Saudi Arabia', date: 'May 2024', status: 'archived' },
-];
+interface Edition {
+  id: string;
+  name: string;
+  location: string;
+  date: string;
+  status: 'draft' | 'live' | 'archived';
+}
 
 const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [editions, setEditions] = useState<Edition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleArchive = (id: string) => {
-    console.log(`Archiving edition ${id}`);
+  useEffect(() => {
+    loadEditions();
+  }, []);
+
+  const loadEditions = async () => {
+    try {
+      setLoading(true);
+      const data = await editionsAPI.getAll();
+      setEditions(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load editions');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const activeEditions = MOCK_EDITIONS.filter(edition => edition.status !== 'archived');
+  const handleArchive = async (id: string) => {
+    try {
+      const edition = editions.find(e => e.id === id);
+      if (edition) {
+        await editionsAPI.update(id, { ...edition, status: 'archived' });
+        loadEditions();
+      }
+    } catch (err) {
+      console.error('Failed to archive edition:', err);
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    try {
+      const edition = editions.find(e => e.id === id);
+      if (edition) {
+        await editionsAPI.update(id, { ...edition, status: 'live' });
+        loadEditions();
+      }
+    } catch (err) {
+      console.error('Failed to restore edition:', err);
+    }
+  };
+
+  const activeEditions = editions.filter(edition => edition.status !== 'archived');
+  const liveCount = editions.filter(edition => edition.status === 'live').length;
+  const draftCount = editions.filter(edition => edition.status === 'draft').length;
 
   const filteredEditions = activeEditions.filter(edition => {
     const query = searchQuery.toLowerCase();
@@ -27,6 +71,22 @@ const Dashboard = () => {
       edition.date.toLowerCase().includes(query)
     );
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-muted-foreground">Loading editions...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-red-400">Error: {error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 md:space-y-16 animate-fade-in">
@@ -52,11 +112,11 @@ const Dashboard = () => {
           </div>
           <div className="flex flex-col sm:border-l border-white/10 sm:pl-16">
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-2">Production Live</span>
-            <span className="text-2xl md:text-3xl font-black text-[#7bb302]">2</span>
+            <span className="text-2xl md:text-3xl font-black text-[#7bb302]">{liveCount}</span>
           </div>
           <div className="flex flex-col border-l border-white/10 pl-8 sm:pl-16 hidden sm:flex">
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-2">Pending Drafts</span>
-            <span className="text-2xl md:text-3xl font-black text-orange-400">1</span>
+            <span className="text-2xl md:text-3xl font-black text-orange-400">{draftCount}</span>
           </div>
         </div>
         <div className="w-full lg:w-[400px] h-14 bg-white/5 border border-white/10 rounded-2xl px-6 flex items-center gap-4 text-muted-foreground hover:bg-white/[0.08] hover:border-[#7bb302]/40 transition-all group focus-within:border-[#7bb302]/50 focus-within:bg-white/10">
@@ -82,6 +142,7 @@ const Dashboard = () => {
               key={edition.id}
               {...edition}
               onArchive={handleArchive}
+              onRestore={handleRestore}
             />
           ))}
         </div>

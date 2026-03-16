@@ -20,12 +20,9 @@ body {
   font-family: 'Geist', 'Inter', system-ui, sans-serif;
   overflow-x: hidden;
   scrollbar-width: none;
-  /* Hide scrollbar for Firefox */
   -ms-overflow-style: none;
-  /* Hide scrollbar for IE and Edge */
 }
 
-/* Hide scrollbar for Chrome, Safari and Opera */
 ::-webkit-scrollbar {
   display: none;
 }
@@ -41,77 +38,22 @@ body {
 
 /* Form Styles */
 .input-field {
-  @apply w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm;
+  @apply w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm text-white;
+}
+
+.input-field::placeholder {
+  @apply text-muted-foreground;
 }
 
 .label {
   @apply block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2;
 }
 
-/* Glass Button Base */
-.glass-button-base {
-  position: relative;
-  overflow: hidden;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
-}
-
-.glass-button-base::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 50%;
-  height: 100%;
-  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.2), transparent);
-  pointer-events: none;
-}
-
-.glass-button-base:hover::after {
-  animation: shimmer-button 1.5s infinite;
-}
-
-@keyframes shimmer-button {
-  0% {
-    transform: translateX(-100%) skewX(-15deg);
-  }
-
-  100% {
-    transform: translateX(200%) skewX(-15deg);
-  }
-}
-
-/* Button Variants */
+/* Button Styles */
 .btn-primary {
-  @apply bg-[#7bb302]/80 hover:bg-[#7bb302] px-10 py-5 rounded-2xl text-base font-bold transition-all active:scale-95 text-white shadow-lg shadow-primary/20;
+  @apply bg-primary text-white font-semibold py-3 px-6 rounded-xl hover:brightness-110 transition-all;
 }
 
 .btn-secondary {
-  @apply bg-white/5 hover:bg-white/10 border border-white/10 px-10 py-5 rounded-2xl text-base font-bold transition-all active:scale-95 text-white;
-}
-
-.btn-accent {
-  @apply bg-[#232323]/80 hover:bg-[#232323] text-white px-10 py-5 rounded-2xl text-base font-bold transition-all active:scale-95;
-}
-
-.btn-card-action {
-  @apply flex-1 flex items-center justify-center gap-3 px-10 py-4 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold transition-all border border-white/5 group-hover:border-[#7bb302]/30 text-white;
-}
-
-/* Animations */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.5s ease forwards;
+  @apply bg-white/10 text-white font-semibold py-3 px-6 rounded-xl border border-white/10 hover:bg-white/20 transition-all;
 }

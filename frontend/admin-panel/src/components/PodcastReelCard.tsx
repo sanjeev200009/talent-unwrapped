@@ -14,6 +14,7 @@ interface PodcastReelCardProps {
   reel: PodcastReel;
   onUpdate: (id: string, field: keyof PodcastReel, value: string) => void;
   onRemove: (id: string) => void;
+  onUploadThumbnail?: (id: string) => void;
 }
 
 const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
@@ -41,7 +42,7 @@ const formatViews = (count: string) => {
   return `${n} views`;
 };
 
-const PodcastReelCard: React.FC<PodcastReelCardProps> = ({ reel, onUpdate, onRemove }) => {
+const PodcastReelCard: React.FC<PodcastReelCardProps> = ({ reel, onUpdate, onRemove, onUploadThumbnail }) => {
   const videoId = useMemo(() => extractYoutubeVideoId(reel.url), [reel.url]);
   const [isFetching, setIsFetching] = useState(false);
 
@@ -143,7 +144,18 @@ const PodcastReelCard: React.FC<PodcastReelCardProps> = ({ reel, onUpdate, onRem
 
       {/* Thumbnail URL (read-only preview of fetched URL, editable override) */}
       <div className="space-y-2">
-        <label className="label">Thumbnail URL</label>
+        <div className="flex items-center justify-between">
+          <label className="label">Thumbnail URL</label>
+          {onUploadThumbnail && (
+            <button
+              type="button"
+              onClick={() => onUploadThumbnail(reel.id)}
+              className="text-xs text-[#7bb302] hover:underline font-medium"
+            >
+              Upload
+            </button>
+          )}
+        </div>
         <input
           type="text"
           className="input-field py-2 text-xs"

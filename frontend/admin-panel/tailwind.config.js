@@ -8,8 +8,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "#0a0a0c",
-        foreground: "#f8fafc",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
         card: {
           DEFAULT: "rgba(35, 35, 35, 0.7)",
           foreground: "#f8fafc",
