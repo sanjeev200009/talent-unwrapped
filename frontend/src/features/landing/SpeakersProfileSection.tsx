@@ -5,7 +5,7 @@ import {
     PlayCircleFilledIcon,
     LinkedinIcon,
 } from "@/components/common/Icons";
-import { Speaker } from "@/types";
+import type { Speaker } from "@/types";
 
 interface SpeakersProfileSectionProps {
     edition?: "Dubai" | "Singapore" | "Sri Lanka";

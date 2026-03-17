@@ -4,7 +4,7 @@
  */
 
 import { apiClient, API_CONFIG } from "../api";
-import { ContactFormData } from "../../types";
+import type { ContactFormData } from "../../types";
 
 /**
  * Submit a contact form

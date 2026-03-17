@@ -24,6 +24,7 @@ interface EpisodeFormData {
   duration: string;
   added_date: string;
   thumbnail_url: string;
+  images: string[];
   speakers: SpeakerWithQuestions[];
   reels: PodcastReel[];
 }
@@ -79,7 +80,7 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
   const [loading, setLoading] = useState(isEditing);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [uploadModal, setUploadModal] = useState<{ type: 'edition' | 'speaker' | 'episode' | 'reel'; episodeIndex?: number; speakerIndex?: number; reelId?: string } | null>(null);
+  const [uploadModal, setUploadModal] = useState<{ type: 'edition' | 'speaker' | 'episode' | 'reel' | 'episodeImage'; episodeIndex?: number; speakerIndex?: number; reelId?: string } | null>(null);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -101,6 +102,7 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
       duration: '',
       added_date: '',
       thumbnail_url: '',
+      images: [],
       speakers: [{ id: '', name: '', role: '', linkedin: '', country: '', location: '', photo_url: '', questions: [{ id: 'new-0', text: '' }] }],
       reels: [{ id: '1', title: '', description: '', views: '', thumbnailUrl: '', url: '' }]
     }
@@ -184,6 +186,18 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
       if (episodesData.length > 0) {
         const episodesWithReels = await Promise.all(episodesData.map(async (ep: any) => {
           const reelsData = await reelsAPI.getAll(undefined, ep.id);
+          let episodeImages: string[] = [];
+          if (ep.images) {
+            if (Array.isArray(ep.images)) {
+              episodeImages = ep.images;
+            } else if (typeof ep.images === 'string') {
+              try {
+                episodeImages = JSON.parse(ep.images);
+              } catch {
+                episodeImages = [];
+              }
+            }
+          }
           return {
             id: ep.id,
             title: ep.title || '',
@@ -192,6 +206,7 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
             duration: ep.duration || '',
             added_date: ep.added_date || '',
             thumbnail_url: ep.thumbnail_url || '',
+            images: episodeImages,
             speakers: ep.speakers && ep.speakers.length > 0 
               ? ep.speakers.map((s: any) => ({
                   id: s.id || '',
@@ -288,6 +303,10 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
       else if (uploadModal?.type === 'speaker') folder = 'speakers';
       else if (uploadModal?.type === 'episode') folder = 'episodes';
       else if (uploadModal?.type === 'reel') folder = 'reels';
+      else if (uploadModal?.type === 'episodeImage' && uploadModal.episodeIndex !== undefined) {
+        const episodeTitle = episodes[uploadModal.episodeIndex]?.title || 'untitled';
+        folder = `episode/${episodeTitle.toLowerCase().replace(/\s+/g, '-')}`;
+      }
       
       const publicUrl = await uploadAPI.uploadImage(file, 'images', folder);
       
@@ -300,6 +319,8 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
           handleUpdateEpisode(uploadModal.episodeIndex, 'thumbnail_url', publicUrl);
         } else if (uploadModal?.type === 'reel' && uploadModal.episodeIndex !== undefined && uploadModal.reelId) {
           handleUpdateReelInEpisode(uploadModal.episodeIndex, uploadModal.reelId, 'thumbnailUrl', publicUrl);
+        } else if (uploadModal?.type === 'episodeImage' && uploadModal.episodeIndex !== undefined) {
+          handleAddImageToEpisode(uploadModal.episodeIndex, publicUrl);
         }
         setUploadModal(null);
         setUploadPreview(null);
@@ -339,6 +360,7 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
       duration: '',
       added_date: '',
       thumbnail_url: '',
+      images: [],
       speakers: [{ id: '', name: '', role: '', linkedin: '', country: '', location: '', photo_url: '', questions: [{ id: `new-${Date.now()}`, text: '' }] }],
       reels: [{ id: Math.random().toString(36).substr(2, 9), title: '', description: '', views: '', thumbnailUrl: '', url: '' }]
     }]);
@@ -534,6 +556,30 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
     }));
   };
 
+  const handleAddImageToEpisode = (episodeIndex: number, imageUrl: string) => {
+    setEpisodes(episodes.map((ep, ei) => {
+      if (ei === episodeIndex) {
+        return {
+          ...ep,
+          images: [...(ep.images || []), imageUrl]
+        };
+      }
+      return ep;
+    }));
+  };
+
+  const handleRemoveImageFromEpisode = (episodeIndex: number, imageIndex: number) => {
+    setEpisodes(episodes.map((ep, ei) => {
+      if (ei === episodeIndex) {
+        return {
+          ...ep,
+          images: (ep.images || []).filter((_, i) => i !== imageIndex)
+        };
+      }
+      return ep;
+    }));
+  };
+
   const handleAddTask = () => {
     setSchedule(prev => ({
       ...prev,
@@ -619,6 +665,7 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
             duration: episode.duration || null,
             added_date: episode.added_date || null,
             thumbnail_url: episode.thumbnail_url || null,
+            images: episode.images || [],
             speakers: episode.speakers.filter(s => s.name.trim()).map(speaker => ({
               id: speaker.id || undefined,
               name: speaker.name,
@@ -640,6 +687,7 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
             duration: episode.duration || null,
             added_date: episode.added_date || null,
             thumbnail_url: episode.thumbnail_url || null,
+            images: episode.images || [],
             speakers: episode.speakers.filter(s => s.name.trim()).map(speaker => ({
               id: speaker.id || undefined,
               name: speaker.name,
@@ -775,21 +823,14 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
             />
           </div>
           <div className="space-y-3">
-            <label className="label">Location Label</label>
-            <div className="relative">
-              <select 
-                className="input-field appearance-none cursor-pointer pr-10 relative z-10 bg-transparent"
-                value={editionData.location}
-                onChange={(e) => handleInputChange('location', e.target.value)}
-              >
-                <option value="" disabled className="bg-[#0a0a0c] text-muted-foreground">Select a location</option>
-                <option value="Singapore" className="bg-[#0a0a0c] text-white py-2">Singapore</option>
-                <option value="Dubai, UAE" className="bg-[#0a0a0c] text-white py-2">Dubai, UAE</option>
-                <option value="Colombo, Sri Lanka" className="bg-[#0a0a0c] text-white py-2">Colombo, Sri Lanka</option>
-                <option value="Riyadh, Saudi Arabia" className="bg-[#0a0a0c] text-white py-2">Riyadh, Saudi Arabia</option>
-              </select>
-              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-0" size={18} />
-            </div>
+            <label className="label">Location</label>
+            <input 
+              type="text" 
+              placeholder="Enter location (e.g., Singapore, Dubai, Mumbai)"
+              className="input-field"
+              value={editionData.location}
+              onChange={(e) => handleInputChange('location', e.target.value)}
+            />
           </div>
           <div className="space-y-3">
             <label className="label">Date</label>
@@ -937,6 +978,41 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
                     value={episode.thumbnail_url}
                     onChange={(e) => handleUpdateEpisode(episodeIndex, 'thumbnail_url', e.target.value)}
                   />
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-4 border-t border-white/10">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-white font-bold">Episode Images</h5>
+                  <button
+                    type="button"
+                    onClick={() => setUploadModal({ type: 'episodeImage', episodeIndex })}
+                    className="text-sm text-[#7bb302] hover:text-[#6da002] flex items-center gap-1"
+                  >
+                    <Plus size={16} /> Add Image
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {(episode.images || []).map((img, imgIndex) => (
+                    <div key={imgIndex} className="relative group aspect-video rounded-lg overflow-hidden bg-white/5 border border-white/10">
+                      <img src={img} alt={`Episode image ${imgIndex + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImageFromEpisode(episodeIndex, imgIndex)}
+                        className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  {(episode.images || []).length === 0 && (
+                    <div 
+                      onClick={() => setUploadModal({ type: 'episodeImage', episodeIndex })}
+                      className="aspect-video rounded-lg bg-white/5 border border-dashed border-white/20 flex items-center justify-center cursor-pointer hover:border-[#7bb302]/50 transition-colors"
+                    >
+                      <Plus size={20} className="text-muted-foreground opacity-50" />
+                    </div>
+                  )}
                 </div>
               </div>
 

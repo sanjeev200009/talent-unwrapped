@@ -1,4 +1,4 @@
-import { Episode } from "../types";
+import type { Episode } from "../types";
 
 // Edition-specific content structure
 export const EDITION_CONTENT = {

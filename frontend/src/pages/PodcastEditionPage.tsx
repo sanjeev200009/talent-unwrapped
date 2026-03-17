@@ -1,14 +1,17 @@
 import { EpisodeLayout } from "../components";
-import { EditionType } from "../components/layout/EpisodeLayout";
-import { Episode } from "../types";
+import type { EditionType } from "../components/layout/EpisodeLayout";
+import type { Episode } from "../types";
 import { EpisodeCard } from "../features/podcasts";
 import SEO from "../components/common/SEO";
+import { DbSchedule, DbScheduleTask } from "../services/api/client";
 
 interface PodcastEditionPageProps {
   edition: EditionType;
   episodes: Episode[];
   onViewEpisode: (episodeId: string | number) => void;
   children?: React.ReactNode;
+  schedule?: DbSchedule | null;
+  scheduleTasks?: DbScheduleTask[];
 }
 
 /**
@@ -21,6 +24,8 @@ export const PodcastEditionPage = ({
   episodes,
   onViewEpisode,
   children,
+  schedule,
+  scheduleTasks,
 }: PodcastEditionPageProps): JSX.Element => {
   const isDubai = edition === "dubai";
 
@@ -124,7 +129,14 @@ export const PodcastEditionPage = ({
         image={currentSEO.image}
         podcastSchema={editionSchema}
       />
-      <EpisodeLayout edition={edition} showChapters showContact showFooter>
+      <EpisodeLayout 
+        edition={edition} 
+        showChapters 
+        showContact 
+        showFooter
+        schedule={schedule}
+        scheduleTasks={scheduleTasks}
+      >
         {episodesContent}
       </EpisodeLayout>
     </>

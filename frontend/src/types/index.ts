@@ -1,4 +1,7 @@
 // Shared TypeScript types
+import { DbSchedule, DbScheduleTask } from "../services/api/client";
+import type { EditionType } from './edition';
+
 export interface Podcast {
   id: number;
   title: string;
@@ -36,6 +39,7 @@ export interface Episode {
   featured?: boolean;
   videoUrl?: string;
   edition?: string;
+  images?: string[];
 }
 
 // Speaker interface used in episodes with minimal properties
@@ -44,6 +48,7 @@ export interface EpisodeSpeaker {
   role?: string;
   avatar: string;
   linkedinUrl?: string;
+  questions?: string[];
 }
 
 // Video slide interface for full episode pages
@@ -55,12 +60,14 @@ export interface VideoSlide {
   videoUrl?: string;
 }
 
-export type EditionType = "singapore" | "dubai" | "sri-lanka";
-
 // Props for TheThreeChaptersSection component
 export interface TheThreeChaptersSectionProps {
   edition?: EditionType;
   hideTopSection?: boolean;
+  schedule?: DbSchedule | null;
+  scheduleTasks?: DbScheduleTask[];
+  dbEditionId?: string;
+  dbEditionName?: string;
 }
 
 // Contact form data
@@ -71,3 +78,6 @@ export interface ContactFormData {
   company: string;
   designation: string;
 }
+
+// Re-export EditionType for convenience
+export { type EditionType } from './edition';

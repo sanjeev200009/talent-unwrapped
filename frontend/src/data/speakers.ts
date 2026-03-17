@@ -1,4 +1,4 @@
-import { Speaker } from "../types";
+import type { Speaker } from "../types";
 
 // Landing Page speakers data
 export const LANDING_SPEAKERS_DATA: Speaker[] = [

@@ -1,9 +1,9 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { GlobalHeader, FooterSection } from "../index";
-import { EditionType } from "../../types";
+import type { EditionType } from "../../types";
 import { AboutUsSection } from "../../features/landing/AboutUsSection";
 import { TheThreeChaptersSection } from "../../features/podcasts";
-
+import { DbSchedule, DbScheduleTask } from "../../services/api/client";
 
 
 interface EpisodeLayoutProps {
@@ -13,6 +13,8 @@ interface EpisodeLayoutProps {
   showContact?: boolean;
   showFooter?: boolean;
   className?: string;
+  schedule?: DbSchedule | null;
+  scheduleTasks?: DbScheduleTask[];
 }
 
 /**
@@ -33,6 +35,8 @@ export const EpisodeLayout = ({
   showContact = true,
   showFooter = true,
   className = "",
+  schedule,
+  scheduleTasks,
 }: EpisodeLayoutProps): JSX.Element => {
   return (
     <main className="flex flex-col items-center relative bg-white w-full overflow-x-clip">
@@ -48,7 +52,7 @@ export const EpisodeLayout = ({
         )}
 
         {/* Chapters Section - Optional, shown by default - Full width without wrapper */}
-        {showChapters && edition && <TheThreeChaptersSection edition={edition} />}
+        {showChapters && edition && <TheThreeChaptersSection edition={edition} schedule={schedule} scheduleTasks={scheduleTasks} />}
       </div>
 
       {/* Contact Section - Optional, shown by default */}
@@ -59,3 +63,5 @@ export const EpisodeLayout = ({
     </main>
   );
 };
+
+export type { EditionType };

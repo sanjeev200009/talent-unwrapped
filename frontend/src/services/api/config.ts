@@ -5,7 +5,7 @@
 
 export const API_CONFIG = {
   // Base URL for all API requests
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || "https://api.example.com",
+  BASE_URL: import.meta.env.VITE_API_BASE_URL || "http://localhost:3000",
 
   // API Endpoints
   ENDPOINTS: {
@@ -25,6 +25,15 @@ export const API_CONFIG = {
     AUTH_LOGOUT: "/auth/logout",
     AUTH_REFRESH: "/auth/refresh",
     AUTH_PROFILE: "/auth/profile",
+
+    // Edition/Episode endpoints (for DB editions)
+    EDITIONS: "/api/editions",
+    EDITION_DETAIL: (id: string) => `/api/editions/${id}`,
+    EPISODES: "/api/episodes",
+    EPISODE_DETAIL: (id: string) => `/api/episodes/${id}`,
+    REELS: "/api/reels",
+    SCHEDULES: "/api/schedules",
+    SCHEDULE_TASKS: "/api/schedule-tasks",
   },
 
   // Headers

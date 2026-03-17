@@ -1,14 +1,14 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Episode, EditionType } from "../types";
-import { getEpisodesByEdition } from "../data";
-
+import { getEpisodesByEdition, getEpisodesByEditionMixed, getAllEpisodesMerged } from "../data";
 
 
 interface UseEpisodeEditionReturn {
   episodes: Episode[];
   editionName: string;
   handleViewEpisode: (episodeId: string | number) => void;
+  loading: boolean;
 }
 
 /**
@@ -16,6 +16,7 @@ interface UseEpisodeEditionReturn {
  * Encapsulates business logic for episode loading and navigation
  *
  * Features:
+ * - Fetches both hardcoded and DB episodes
  * - Memoizes episodes to prevent unnecessary recalculations
  * - Memoizes edition name formatting
  * - Only recalculates when edition changes
@@ -24,10 +25,30 @@ export const useEpisodeEdition = (
   edition: EditionType,
 ): UseEpisodeEditionReturn => {
   const navigate = useNavigate();
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Memoize episodes - only recalculate if edition changes
-  const episodes = useMemo(() => {
-    return getEpisodesByEdition(edition);
+  useEffect(() => {
+    const loadEpisodes = async () => {
+      setLoading(true);
+      try {
+        const allEpisodes = await getAllEpisodesMerged();
+        const filtered = allEpisodes.filter(ep => {
+          const editionLower = edition.toLowerCase();
+          const epEdition = ep.edition?.toLowerCase() || "";
+          return epEdition === editionLower || 
+                 (editionLower === "sri-lanka" && (epEdition === "sri lanka" || epEdition === "colombo"));
+        });
+        setEpisodes(filtered);
+      } catch (error) {
+        console.error("Failed to load episodes:", error);
+        setEpisodes(getEpisodesByEdition(edition));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadEpisodes();
   }, [edition]);
 
   // Memoize edition name formatting
@@ -46,5 +67,6 @@ export const useEpisodeEdition = (
     episodes,
     editionName,
     handleViewEpisode,
+    loading,
   };
 };

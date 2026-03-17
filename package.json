@@ -1,0 +1,12 @@
+{
+  "name": "talent-unwrapped",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend/admin-panel && npm install && npm run build",
+    "dev": "echo 'Run separately: cd backend && npm run dev for backend, cd frontend/admin-panel && npm run dev for admin panel'"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

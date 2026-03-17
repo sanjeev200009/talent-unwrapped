@@ -6,7 +6,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { edition_id } = req.query;
-    let query = supabase.from('episodes').select('*').order('created_at', { ascending: false });
+    let query = supabase.from('episodes').select('*, editions(*)').order('created_at', { ascending: false });
     
     if (edition_id) {
       query = query.eq('edition_id', edition_id);
@@ -48,7 +48,12 @@ router.get('/', async (req, res) => {
           questions: questions?.filter(q => q.speaker_id === speaker.id).map(q => q.question_text) || []
         }));
 
-        return { ...episode, speakers: speakersWithQuestions };
+        // Rename editions to edition for consistency
+        return { 
+          ...episode, 
+          edition: episode.editions,
+          speakers: speakersWithQuestions 
+        };
       })
     );
 
@@ -60,13 +65,21 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
+    // Get episode with edition info
     const { data: episode, error } = await supabase
       .from('episodes')
-      .select('*')
+      .select('*, editions(*)')
       .eq('id', req.params.id)
       .single();
     
     if (error) throw error;
+
+    // Rename editions to edition for consistency
+    const episodeWithEdition = {
+      ...episode,
+      edition: episode.editions
+    };
+    delete episodeWithEdition.editions;
 
     // Get speakers for this episode
     const { data: episodeSpeakers } = await supabase
@@ -97,7 +110,7 @@ router.get('/:id', async (req, res) => {
       questions: questions?.filter(q => q.speaker_id === speaker.id).map(q => q.question_text) || []
     }));
 
-    res.json({ ...episode, speakers: speakersWithQuestions });
+    res.json({ ...episodeWithEdition, speakers: speakersWithQuestions });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -105,7 +118,7 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { edition_id, title, description, youtube_url, duration, added_date, thumbnail_url, speakers } = req.body;
+    const { edition_id, title, description, youtube_url, duration, added_date, thumbnail_url, images, speakers } = req.body;
     const { data, error } = await supabase
       .from('episodes')
       .insert([{ 
@@ -115,7 +128,8 @@ router.post('/', async (req, res) => {
         youtube_url, 
         duration, 
         added_date, 
-        thumbnail_url
+        thumbnail_url,
+        images: images || []
       }])
       .select()
       .single();
@@ -170,7 +184,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { title, description, youtube_url, duration, added_date, thumbnail_url, speakers } = req.body;
+    const { title, description, youtube_url, duration, added_date, thumbnail_url, images, speakers } = req.body;
     const { data, error } = await supabase
       .from('episodes')
       .update({ 
@@ -180,6 +194,7 @@ router.put('/:id', async (req, res) => {
         duration, 
         added_date, 
         thumbnail_url,
+        images: images || [],
         updated_at: new Date().toISOString()
       })
       .eq('id', req.params.id)

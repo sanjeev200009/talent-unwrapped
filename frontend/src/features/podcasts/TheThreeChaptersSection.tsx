@@ -7,6 +7,7 @@ import { LearnMoreModal } from "../schedule";
 import { ASSETS } from "@/constants/assets";
 import { ArrowRightIcon, VideoCircleFilledIcon, ExportIcon } from "@/components/common/Icons";
 import { SECTION_TITLES, SECTION_DESCRIPTIONS, BUTTONS, TALENT_INTRO_CONTENT } from "@/constants/copy";
+import { fetchScheduleWithTasks, DbSchedule, DbScheduleTask } from "../../services/api/client";
 
 const Counter = ({ value, suffix = "" }: { value: number; suffix?: string }) => {
   const count = useMotionValue(0);
@@ -28,15 +29,59 @@ const Counter = ({ value, suffix = "" }: { value: number; suffix?: string }) => 
 };
 
 /**
+ * Format date from DB format to display format
+ */
+const formatScheduleDate = (startDate: string, endDate?: string): { date: string; dateTime: string } => {
+  const start = new Date(startDate);
+  const startDay = start.getDate();
+  const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
+  const startYear = start.getFullYear();
+  
+  if (endDate) {
+    const end = new Date(endDate);
+    const endDay = end.getDate();
+    const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
+    
+    if (startMonth === endMonth) {
+      return {
+        date: `${startDay}-${endDay} ${endMonth} ${startYear}`,
+        dateTime: startDate
+      };
+    }
+    return {
+      date: `${startDay} ${startMonth} - ${endDay} ${endMonth} ${startYear}`,
+      dateTime: startDate
+    };
+  }
+  
+  return {
+    date: `${startDay}${getOrdinalSuffix(startDay)} ${startMonth} ${startYear}`,
+    dateTime: startDate
+  };
+};
+
+const getOrdinalSuffix = (n: number): string => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+};
+
+/**
  * TheThreeChaptersSection - Complete section
  * Shows specific edition content without filter
  */
 export const TheThreeChaptersSection = ({
   edition = "singapore",
   hideTopSection = false,
+  schedule: dbSchedule,
+  scheduleTasks = [],
+  dbEditionId,
+  dbEditionName,
 }: TheThreeChaptersSectionProps): JSX.Element => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [localDbSchedule, setLocalDbSchedule] = useState<DbSchedule | null>(dbSchedule || null);
+  const [localScheduleTasks, setLocalScheduleTasks] = useState<DbScheduleTask[]>(scheduleTasks);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -45,8 +90,43 @@ export const TheThreeChaptersSection = ({
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
+  // Fetch schedule/tasks if dbEditionId is provided
+  useEffect(() => {
+    if (dbEditionId) {
+      const fetchSchedule = async () => {
+        try {
+          const { schedule, tasks } = await fetchScheduleWithTasks(dbEditionId);
+          setLocalDbSchedule(schedule);
+          setLocalScheduleTasks(tasks);
+        } catch (error) {
+          console.error("Failed to fetch schedule:", error);
+        }
+      };
+      fetchSchedule();
+    }
+  }, [dbEditionId]);
+
   const editionData = getEditionContent(edition);
-  const { name: editionName, schedule, chapters } = editionData;
+  const { name: hardcodedEditionName, schedule: hardcodedSchedule, chapters } = editionData;
+
+  // Use DB edition name if provided, otherwise use hardcoded
+  const editionName = dbEditionName || hardcodedEditionName;
+
+  // Use DB schedule tasks if provided, otherwise use hardcoded chapters
+  const displayChapters = (localDbSchedule && localScheduleTasks.length > 0) || dbEditionId
+    ? localScheduleTasks.map((task, index) => ({
+        id: index + 1,
+        title: task.title,
+        subtitle: task.description || "",
+        videoIcon: "videoCircle",
+        exportIcon: "export",
+      }))
+    : chapters;
+
+  // Use DB schedule if provided, otherwise use hardcoded
+  const schedule = (localDbSchedule && localDbSchedule.start_date) || dbEditionId
+    ? formatScheduleDate(localDbSchedule?.start_date || '', localDbSchedule?.end_date)
+    : hardcodedSchedule;
 
   const decorativeImages = [
     {
@@ -223,7 +303,7 @@ export const TheThreeChaptersSection = ({
           {/* Mobile Carousel - Only visible on mobile */}
           <div className="lg:hidden w-full mb-8">
             <MobileCarouselSection
-              podcastCards={chapters.map((ep) => ({
+              podcastCards={displayChapters.map((ep) => ({
                 id: Number(ep.id),
                 title: ep.title,
                 subtitle: ep.subtitle || "",
@@ -240,7 +320,7 @@ export const TheThreeChaptersSection = ({
             viewport={{ once: true, margin: "-50px" }}
             className="hidden lg:flex gap-4 xl:gap-8 w-full lg:w-[95%] xl:w-auto justify-start"
           >
-            {chapters.map((episode) => (
+            {displayChapters.map((episode) => (
               <motion.article
                 key={episode.id}
                 variants={itemVariants}

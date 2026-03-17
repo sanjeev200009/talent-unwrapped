@@ -1,4 +1,4 @@
-import { Episode, EpisodeSpeaker } from "../../types";
+import type { Episode, EpisodeSpeaker } from "../../types";
 import { METADATA, NAV_LABELS } from "@/constants/copy";
 import { MediaLoader } from "../../components/common";
 

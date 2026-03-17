@@ -4,23 +4,135 @@ import { useNavigate } from "react-router-dom";
 import { LATEST_PODCASTS } from "@/data/episodes";
 import { BackArrowIcon, NextArrowIcon, PlayIcon } from "@/components/common/Icons";
 import { EDITION_NAMES } from "@/constants/copy";
+import { fetchEditions, fetchEpisodesByEdition, fetchDbEpisodesByEdition, DbEdition, Episode } from "@/services/api/client";
+import type { Podcast } from "@/types";
 
 export const LatestPodcastListSection = (): JSX.Element => {
   const [activeFilter, setActiveFilter] = useState("All");
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [dbEditions, setDbEditions] = useState<DbEdition[]>([]);
+  const [dbEpisodes, setDbEpisodes] = useState<Episode[]>([]);
+  const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(false);
   const navigate = useNavigate();
   const sectionRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isManualScrollRef = useRef(true);
 
+  useEffect(() => {
+    const loadDbEditions = async () => {
+      const editions = await fetchEditions();
+      const liveEditions = editions.filter(e => e.status === 'live');
+      setDbEditions(liveEditions);
+    };
+    loadDbEditions();
+  }, []);
+
+  useEffect(() => {
+    const loadDbEpisodes = async () => {
+      setIsLoadingEpisodes(true);
+      try {
+        if (activeFilter === "All") {
+          const allDbEpisodes = await fetchDbEpisodesByEdition('');
+          setDbEpisodes(allDbEpisodes);
+        } else {
+          const dbEdition = dbEditions.find(e => 
+            createEditionSlug(e.name) === activeFilter || 
+            e.name === activeFilter ||
+            e.name.toLowerCase() === activeFilter.toLowerCase()
+          );
+          if (dbEdition) {
+            const dbEpisodesRaw = await fetchEpisodesByEdition(dbEdition.id);
+            const episodes = dbEpisodesRaw.map(ep => ({
+              id: ep.id,
+              title: ep.title || '',
+              description: ep.description || '',
+              image: ep.thumbnail_url || '',
+              videoUrl: ep.youtube_url || '',
+              duration: ep.duration || '',
+              date: ep.added_date || '',
+              edition: dbEdition.name,
+              images: Array.isArray(ep.images) ? ep.images : [],
+            }));
+            setDbEpisodes(episodes);
+          } else {
+            setDbEpisodes([]);
+          }
+        }
+      } finally {
+        setIsLoadingEpisodes(false);
+      }
+    };
+    loadDbEpisodes();
+  }, [activeFilter, dbEditions]);
+
+  const createEditionSlug = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/\s+edition\s*/gi, '')
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '');
+  };
+
+  const getPodcastThumbnail = (podcast: Podcast | Episode): string => {
+    if ('thumbnailUrl' in podcast && podcast.thumbnailUrl) {
+      return podcast.thumbnailUrl;
+    }
+    if ('image' in podcast && podcast.image) {
+      return podcast.image;
+    }
+    // Check for images array (DB episodes)
+    if ('images' in podcast && Array.isArray(podcast.images) && podcast.images.length > 0) {
+      return podcast.images[0];
+    }
+    return '';
+  };
+
+  const getPodcastId = (podcast: Podcast | Episode): string => {
+    return String(podcast.id);
+  };
+
+  const getPodcastEdition = (podcast: Podcast | Episode): string => {
+    return podcast.edition || '';
+  };
+
+  const allFilterOptions = ["All", "Singapore", "Dubai", "Sri Lanka", ...dbEditions.map(e => e.name)];
+
   // Filter podcasts based on active tab
   const podcastData = LATEST_PODCASTS.filter(podcast => {
     if (activeFilter === "All") return true;
-    return podcast.edition.includes(activeFilter);
+    if (activeFilter === "Singapore") return podcast.edition.includes("Singapore");
+    if (activeFilter === "Dubai") return podcast.edition.includes("Dubai");
+    if (activeFilter === "Sri Lanka") return podcast.edition.includes("Sri Lanka");
+    return getPodcastEdition(podcast).includes(activeFilter);
   });
 
+  // Combine with DB episodes
+  const isHardcodedEdition = ["Singapore", "Dubai", "Sri Lanka"].includes(activeFilter);
+  const isDbEditionFilter = dbEditions.some(e => 
+    createEditionSlug(e.name) === activeFilter || 
+    e.name === activeFilter ||
+    e.name.toLowerCase() === activeFilter.toLowerCase()
+  );
+  
+  // Determine which podcasts to show based on filter
+  let displayPodcasts: (Podcast | Episode)[] = [];
+  
+  console.log('displayPodcasts - isDbEditionFilter:', isDbEditionFilter, 'isLoadingEpisodes:', isLoadingEpisodes, 'dbEpisodes:', dbEpisodes.length, 'podcastData:', podcastData.length);
+  
+  if (isDbEditionFilter && isLoadingEpisodes) {
+    displayPodcasts = [];
+  } else if (activeFilter === "All") {
+    displayPodcasts = [...podcastData, ...dbEpisodes];
+  } else if (isHardcodedEdition) {
+    displayPodcasts = podcastData;
+  } else if (isDbEditionFilter) {
+    displayPodcasts = dbEpisodes;
+  } else {
+    displayPodcasts = podcastData;
+  }
+
   const ITEMS_PER_PAGE = 5;
-  const totalPages = Math.ceil(podcastData.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(displayPodcasts.length / ITEMS_PER_PAGE);
   const currentPage = Math.floor(currentIndex / ITEMS_PER_PAGE);
 
   /**
@@ -81,7 +193,7 @@ export const LatestPodcastListSection = (): JSX.Element => {
         // Calculate current index based on scroll position
         const scrollPosition = container.scrollLeft;
         const newIndex = Math.round(scrollPosition / itemSize);
-        const maxIndex = podcastData.length - 1;
+        const maxIndex = displayPodcasts.length - 1;
 
         setCurrentIndex(Math.min(newIndex, maxIndex));
       }, 50);
@@ -94,7 +206,7 @@ export const LatestPodcastListSection = (): JSX.Element => {
       container.removeEventListener("scroll", handleScrollTracking);
       clearTimeout(timeoutId);
     };
-  }, [podcastData.length]);
+  }, [displayPodcasts.length]);
 
   const handleScroll = (direction: "left" | "right") => {
     if (scrollContainerRef.current) {
@@ -198,7 +310,7 @@ export const LatestPodcastListSection = (): JSX.Element => {
             className="flex flex-wrap items-center gap-4 sm:gap-6 md:gap-8 relative flex-[0_0_auto]"
             aria-label="Podcast categories"
           >
-            {["All", "Singapore", "Dubai", "Sri Lanka"].map((filter) => (
+            {allFilterOptions.map((filter) => (
               <button
                 key={filter}
                 onClick={() => handleFilterChange(filter)}
@@ -248,9 +360,9 @@ export const LatestPodcastListSection = (): JSX.Element => {
               viewport={{ once: true, margin: "-50px" }}
               className="flex gap-4 sm:gap-5 md:gap-6"
             >
-              {podcastData.map((podcast) => (
+              {displayPodcasts.map((podcast) => (
                 <motion.article
-                  key={podcast.id}
+                  key={getPodcastId(podcast)}
                   variants={itemVariants}
                   className="relative w-[250px] sm:w-[270px] md:w-[282px] flex flex-col gap-3 md:gap-4 group flex-shrink-0 snap-start"
                 >
@@ -259,20 +371,19 @@ export const LatestPodcastListSection = (): JSX.Element => {
                     onClick={() => handlePlayClick(podcast)}
                   >
                     <div className="block w-full h-full relative">
-                      {podcast.thumbnailUrl ? (
+                      {getPodcastThumbnail(podcast) ? (
                         <img
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                          src={podcast.thumbnailUrl}
+                          src={getPodcastThumbnail(podcast)}
                           alt={podcast.title}
                         />
-                      ) : (
-                        podcast.videoUrl.includes("youtube") || podcast.videoUrl.includes("youtu.be") ? (
-                          <img
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            src={getYoutubeThumbnail(podcast.videoUrl)}
-                            alt={podcast.title}
-                          />
-                        ) : (
+                      ) : (podcast.videoUrl && (podcast.videoUrl.includes("youtube") || podcast.videoUrl.includes("youtu.be"))) ? (
+                        <img
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                          src={getYoutubeThumbnail(podcast.videoUrl)}
+                          alt={podcast.title}
+                        />
+                      ) : podcast.videoUrl ? (
                           <video
                             className="w-full h-full object-cover"
                             src={`${podcast.videoUrl}#t=0.001`}
@@ -280,7 +391,11 @@ export const LatestPodcastListSection = (): JSX.Element => {
                             playsInline
                             muted
                           />
-                        )
+                        ) : (
+                        // Fallback for episodes with no thumbnail or video
+                        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                          <span className="text-white text-sm text-center px-4">{podcast.title}</span>
+                        </div>
                       )}
                       <div
                         className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/50 transition-all duration-300 z-10"

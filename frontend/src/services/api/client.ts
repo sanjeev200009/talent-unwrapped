@@ -1,4 +1,359 @@
 import { API_CONFIG, getApiUrl } from "./config";
+import type { Episode, EpisodeSpeaker } from "../../types";
+
+/**
+ * DB Edition type from Supabase
+ */
+export interface DbEdition {
+  id: string;
+  name: string;
+  location: string;
+  date: string;
+  status: 'draft' | 'live' | 'archived';
+  internal_notes?: string;
+  created_at: string;
+  updated_at: string;
+  image_url?: string;
+}
+
+/**
+ * DB Episode type from Supabase (with edition joined)
+ */
+export interface DbEpisodeRaw {
+  id: string;
+  edition_id: string;
+  title: string;
+  description?: string;
+  youtube_url?: string;
+  duration?: string;
+  added_date?: string;
+  thumbnail_url?: string;
+  images?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * DB Episode with speakers joined (from API)
+ */
+export interface DbEpisode extends Omit<DbEpisodeRaw, 'edition_id'> {
+  edition?: DbEdition;
+  speakers: DbSpeaker[];
+}
+
+/**
+ * DB Speaker type
+ */
+export interface DbSpeaker {
+  id: string;
+  edition_id: string;
+  name: string;
+  role?: string;
+  linkedin?: string;
+  country?: string;
+  location?: string;
+  photo_url?: string;
+  created_at: string;
+  updated_at: string;
+  questions?: string[];
+}
+
+/**
+ * Transform DB Episode to frontend Episode type
+ */
+function transformDbEpisodeToEpisode(dbEpisode: DbEpisode): Episode {
+  const editionName = dbEpisode.edition?.name || dbEpisode.edition?.location || 'Unknown';
+  
+  const speakers: EpisodeSpeaker[] = (dbEpisode.speakers || []).map((speaker) => ({
+    name: speaker.name,
+    role: speaker.role,
+    avatar: speaker.photo_url || '',
+    linkedinUrl: speaker.linkedin,
+    questions: speaker.questions || [],
+  }));
+
+  let images: string[] = [];
+  if (dbEpisode.images) {
+    if (Array.isArray(dbEpisode.images)) {
+      images = dbEpisode.images;
+    } else if (typeof dbEpisode.images === 'string') {
+      try {
+        images = JSON.parse(dbEpisode.images);
+      } catch {
+        images = [];
+      }
+    }
+  }
+
+  console.log('DB Episode images:', dbEpisode.images, 'Parsed:', images);
+
+  return {
+    id: dbEpisode.id,
+    title: dbEpisode.title,
+    description: dbEpisode.description,
+    image: dbEpisode.thumbnail_url || '',
+    videoUrl: dbEpisode.youtube_url || '',
+    duration: dbEpisode.duration,
+    date: dbEpisode.added_date ? formatDate(dbEpisode.added_date) : '',
+    speakers,
+    edition: editionName,
+    featured: false,
+    category: 'EPISODE',
+    images,
+  };
+}
+
+/**
+ * Format date string to "Dec 10, 2025" format
+ */
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Fetch all live editions from the database
+ */
+export async function fetchEditions(): Promise<DbEdition[]> {
+  try {
+    const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.EDITIONS));
+    if (!response.ok) {
+      throw new Error(`Failed to fetch editions: ${response.statusText}`);
+    }
+    const editions: DbEdition[] = await response.json();
+    return editions.filter(e => e.status === 'live');
+  } catch (error) {
+    console.error('Error fetching editions:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetch a single edition by ID
+ */
+export async function fetchEditionById(id: string): Promise<DbEdition | null> {
+  try {
+    const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.EDITION_DETAIL(id)));
+    if (!response.ok) {
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching edition:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch all episodes from the database
+ */
+export async function fetchEpisodes(): Promise<DbEpisode[]> {
+  try {
+    const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.EPISODES));
+    if (!response.ok) {
+      throw new Error(`Failed to fetch episodes: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching episodes:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetch episodes for a specific edition
+ */
+export async function fetchEpisodesByEdition(editionId: string): Promise<DbEpisode[]> {
+  try {
+    const response = await fetch(`${getApiUrl(API_CONFIG.ENDPOINTS.EPISODES)}?edition_id=${editionId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch episodes: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching episodes by edition:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetch a single episode by ID
+ */
+export async function fetchEpisodeById(id: string): Promise<Episode | null> {
+  try {
+    const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.EPISODE_DETAIL(id)));
+    if (!response.ok) {
+      return null;
+    }
+    const dbEpisode: DbEpisode = await response.json();
+    return transformDbEpisodeToEpisode(dbEpisode);
+  } catch (error) {
+    console.error('Error fetching episode:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch all DB episodes transformed to frontend Episode type
+ */
+export async function fetchDbEpisodes(): Promise<Episode[]> {
+  const dbEpisodes = await fetchEpisodes();
+  return dbEpisodes.map(transformDbEpisodeToEpisode);
+}
+
+/**
+ * Fetch DB episodes for a specific edition (by edition name or ID)
+ */
+export async function fetchDbEpisodesByEdition(editionName: string): Promise<Episode[]> {
+  const editions = await fetchEditions();
+  const edition = editions.find(e => 
+    e.name.toLowerCase().includes(editionName.toLowerCase()) ||
+    e.location.toLowerCase().includes(editionName.toLowerCase())
+  );
+  
+  if (!edition) {
+    return [];
+  }
+  
+  const dbEpisodes = await fetchEpisodesByEdition(edition.id);
+  return dbEpisodes.map(transformDbEpisodeToEpisode);
+}
+
+/**
+ * DB Reel type from Supabase
+ */
+export interface DbReel {
+  id: string;
+  edition_id: string;
+  episode_id?: string;
+  title: string;
+  description?: string;
+  views?: string;
+  thumbnail_url?: string;
+  url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Transform DB Reel to frontend Reel type
+ */
+export function transformDbReelToReel(dbReel: DbReel) {
+  return {
+    id: dbReel.id,
+    title: dbReel.title,
+    description: dbReel.description,
+    thumbnailUrl: dbReel.thumbnail_url || '',
+    videoUrl: dbReel.url || '',
+    edition: dbReel.edition_id,
+    views: dbReel.views,
+  };
+}
+
+/**
+ * Fetch all reels from database
+ */
+export async function fetchReels(): Promise<DbReel[]> {
+  try {
+    const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.REELS));
+    if (!response.ok) {
+      throw new Error(`Failed to fetch reels: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching reels:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetch reels by episode ID
+ */
+export async function fetchReelsByEpisode(episodeId: string): Promise<DbReel[]> {
+  try {
+    const response = await fetch(`${getApiUrl(API_CONFIG.ENDPOINTS.REELS)}?episode_id=${episodeId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch reels: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching reels by episode:', error);
+    return [];
+  }
+}
+
+/**
+ * DB Schedule type from Supabase
+ */
+export interface DbSchedule {
+  id: string;
+  edition_id: string;
+  start_date: string;
+  end_date: string;
+  created_at: string;
+}
+
+/**
+ * DB Schedule Task type from Supabase
+ */
+export interface DbScheduleTask {
+  id: string;
+  schedule_id: string;
+  title: string;
+  description?: string;
+  task_date?: string;
+  task_time?: string;
+  created_at: string;
+}
+
+/**
+ * Fetch schedule by edition ID
+ */
+export async function fetchScheduleByEdition(editionId: string): Promise<DbSchedule | null> {
+  try {
+    const response = await fetch(`${getApiUrl(API_CONFIG.ENDPOINTS.SCHEDULES)}?edition_id=${editionId}`);
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    return data && data.length > 0 ? data[0] : null;
+  } catch (error) {
+    console.error('Error fetching schedule:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch schedule tasks by schedule ID
+ */
+export async function fetchScheduleTasks(scheduleId: string): Promise<DbScheduleTask[]> {
+  try {
+    const response = await fetch(`${getApiUrl(API_CONFIG.ENDPOINTS.SCHEDULE_TASKS)}?schedule_id=${scheduleId}`);
+    if (!response.ok) {
+      return [];
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching schedule tasks:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetch schedule and tasks by edition ID
+ */
+export async function fetchScheduleWithTasks(editionId: string): Promise<{ schedule: DbSchedule | null; tasks: DbScheduleTask[] }> {
+  const schedule = await fetchScheduleByEdition(editionId);
+  if (!schedule) {
+    return { schedule: null, tasks: [] };
+  }
+  const tasks = await fetchScheduleTasks(schedule.id);
+  return { schedule, tasks };
+}
 
 /**
  * Custom error class for API errors

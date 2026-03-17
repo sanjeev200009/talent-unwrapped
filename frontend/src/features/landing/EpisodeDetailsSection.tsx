@@ -16,10 +16,10 @@ interface ImageItem {
 }
 
 interface EpisodeDetailsSectionProps {
-  // Props removed to maintain consistent design
+  episodeImages?: string[];
 }
 
-export const EpisodeDetailsSection = (_props: EpisodeDetailsSectionProps): JSX.Element => {
+export const EpisodeDetailsSection = ({ episodeImages }: EpisodeDetailsSectionProps): JSX.Element => {
   const episodeTypes: EpisodeType[] = [
     { id: 1, title: GUEST_SECTION_CONTENT.FIRESIDE_CHATS, isActive: true },
     { id: 2, title: GUEST_SECTION_CONTENT.ONE_ON_ONE, isActive: false },
@@ -27,7 +27,7 @@ export const EpisodeDetailsSection = (_props: EpisodeDetailsSectionProps): JSX.E
     { id: 4, title: GUEST_SECTION_CONTENT.ROUNDTABLE, isActive: false },
   ];
 
-  const images: ImageItem[] = [
+  const defaultImages: ImageItem[] = [
     {
       id: 1,
       src: "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770791419/Frame_1000003798_chw5ji.png",
@@ -54,6 +54,14 @@ export const EpisodeDetailsSection = (_props: EpisodeDetailsSectionProps): JSX.E
       alt: "Avik Ghosh session",
     },
   ];
+
+  const images: ImageItem[] = episodeImages && episodeImages.length > 0
+    ? episodeImages.map((src, index) => ({
+        id: index + 1,
+        src,
+        alt: `Episode image ${index + 1}`,
+      }))
+    : defaultImages;
 
   const [activeEpisode, setActiveEpisode] = useState<number>(1);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);

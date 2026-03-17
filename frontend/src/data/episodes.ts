@@ -1,4 +1,5 @@
-import { Episode, Podcast } from "../types";
+import type { Episode, Podcast } from "../types";
+import { fetchDbEpisodes, fetchDbEpisodesByEdition, fetchEpisodeById } from "../services/api/client";
 
 export const EPISODES: Episode[] = [
     {
@@ -199,3 +200,50 @@ export const getEpisodesByEdition = (edition: string): Episode[] => {
 export const getEpisodeById = (id: string | number): Episode | undefined => {
     return EPISODES.find(ep => ep.id === String(id));
 };
+
+/**
+ * Get all episodes (hardcoded + DB merged)
+ * Returns hardcoded episodes by default, DB episodes are fetched separately
+ */
+export async function getAllEpisodes(): Promise<Episode[]> {
+    return EPISODES;
+}
+
+/**
+ * Get episodes filtered by edition (hardcoded + DB merged)
+ */
+export async function getEpisodesByEditionMixed(edition: string): Promise<Episode[]> {
+    const formattedEdition = edition.toLowerCase();
+    
+    const hardcodedFiltered = getEpisodesByEdition(formattedEdition);
+    
+    const dbEpisodes = await fetchDbEpisodesByEdition(formattedEdition);
+    
+    const dbFiltered = dbEpisodes.filter(ep => 
+        ep.edition?.toLowerCase() === formattedEdition ||
+        ep.edition?.toLowerCase().includes(formattedEdition)
+    );
+    
+    return [...hardcodedFiltered, ...dbFiltered];
+}
+
+/**
+ * Get all episodes with DB data merged in
+ */
+export async function getAllEpisodesMerged(): Promise<Episode[]> {
+    const dbEpisodes = await fetchDbEpisodes();
+    return [...EPISODES, ...dbEpisodes];
+}
+
+/**
+ * Get episode by ID from either hardcoded or DB
+ */
+export async function getEpisodeByIdMixed(id: string | number): Promise<Episode | undefined> {
+    const hardcodedEpisode = getEpisodeById(id);
+    if (hardcodedEpisode) {
+        return hardcodedEpisode;
+    }
+    
+    const dbEpisode = await fetchEpisodeById(String(id));
+    return dbEpisode || undefined;
+}

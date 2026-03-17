@@ -14,10 +14,10 @@ createRoot(rootElement).render(
 );
 
 // Report performance metrics
-import("web-vitals").then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
-  getCLS(reportWebVitals);
-  getFID(reportWebVitals);
-  getFCP(reportWebVitals);
-  getLCP(reportWebVitals);
-  getTTFB(reportWebVitals);
-});
+import { onCLS, onINP, onFCP, onLCP, onTTFB } from "web-vitals";
+
+onCLS(reportWebVitals);
+onINP(reportWebVitals);
+onFCP(reportWebVitals);
+onLCP(reportWebVitals);
+onTTFB(reportWebVitals);

@@ -106,3 +106,6 @@ CREATE TABLE IF NOT EXISTS public.admin_users (
 INSERT INTO public.admin_users (email, password, name) 
 VALUES ('admin@talentunwrapped.com', 'admin123', 'Admin')
 ON CONFLICT (email) DO NOTHING;
+
+-- Migration: Add images column to episodes table
+ALTER TABLE public.episodes ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]';

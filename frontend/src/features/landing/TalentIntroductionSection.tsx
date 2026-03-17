@@ -7,6 +7,15 @@ import { getEditionContent } from "../../data";
 import { ASSETS } from "@/constants/assets";
 import { ArrowRightIcon, VideoCircleFilledIcon, ExportIcon } from "@/components/common/Icons";
 import { SECTION_TITLES, SECTION_DESCRIPTIONS, BUTTONS, TALENT_INTRO_CONTENT } from "@/constants/copy";
+import { fetchEditions, fetchScheduleWithTasks, fetchDbEpisodesByEdition, DbEdition, DbScheduleTask, Episode } from "../../services/api/client";
+
+const createEditionSlug = (name: string): string => {
+  return name
+    .toLowerCase()
+    .replace(/\s+edition\s*/gi, '')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
+};
 
 const Counter = ({ value, suffix = "" }: { value: number; suffix?: string }) => {
   const count = useMotionValue(0);
@@ -29,7 +38,10 @@ const Counter = ({ value, suffix = "" }: { value: number; suffix?: string }) => 
 
 export const TalentIntroductionSection = (): JSX.Element => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedEdition, setSelectedEdition] = useState<"singapore" | "dubai" | "sri-lanka">("singapore");
+  const [selectedEdition, setSelectedEdition] = useState<string>("singapore");
+  const [dbEditions, setDbEditions] = useState<DbEdition[]>([]);
+  const [dbScheduleTasks, setDbScheduleTasks] = useState<DbScheduleTask[]>([]);
+  const [dbEpisodes, setDbEpisodes] = useState<Episode[]>([]);
 
   const [isMobile, setIsMobile] = useState(false);
 
@@ -40,7 +52,96 @@ export const TalentIntroductionSection = (): JSX.Element => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const editionData = getEditionContent(selectedEdition as any);
+  // Fetch DB editions
+  useEffect(() => {
+    const loadDbEditions = async () => {
+      try {
+        const editions = await fetchEditions();
+        setDbEditions(editions.filter(e => e.status === 'live'));
+      } catch (error) {
+        console.error("Failed to load editions:", error);
+      }
+    };
+    loadDbEditions();
+  }, []);
+
+  // Fetch schedule tasks when DB edition is selected
+  useEffect(() => {
+    const loadScheduleTasks = async () => {
+      const isDb = !['singapore', 'dubai', 'sri-lanka'].includes(selectedEdition);
+      if (isDb) {
+        const edition = dbEditions.find(e => createEditionSlug(e.name) === selectedEdition);
+        if (edition) {
+          try {
+            const { tasks } = await fetchScheduleWithTasks(edition.id);
+            setDbScheduleTasks(tasks);
+          } catch (error) {
+            console.error("Failed to load schedule tasks:", error);
+            setDbScheduleTasks([]);
+          }
+        }
+      } else {
+        setDbScheduleTasks([]);
+      }
+    };
+    loadScheduleTasks();
+  }, [selectedEdition, dbEditions]);
+
+  // Fetch episodes when DB edition is selected
+  useEffect(() => {
+    const loadDbEpisodes = async () => {
+      const isDb = !['singapore', 'dubai', 'sri-lanka'].includes(selectedEdition);
+      if (isDb) {
+        const edition = dbEditions.find(e => createEditionSlug(e.name) === selectedEdition);
+        if (edition) {
+          try {
+            const episodes = await fetchDbEpisodesByEdition(edition.id);
+            setDbEpisodes(episodes);
+          } catch (error) {
+            console.error("Failed to load DB episodes:", error);
+            setDbEpisodes([]);
+          }
+        }
+      } else {
+        setDbEpisodes([]);
+      }
+    };
+    loadDbEpisodes();
+  }, [selectedEdition, dbEditions]);
+
+  // Check if selected edition is a DB edition
+  const isDbEdition = !['singapore', 'dubai', 'sri-lanka'].includes(selectedEdition);
+  const selectedDbEdition = isDbEdition ? dbEditions.find(e => createEditionSlug(e.name) === selectedEdition) : null;
+
+  // Get edition content - use DB data if available, otherwise fallback to hardcoded
+  let editionData;
+  if (isDbEdition && selectedDbEdition) {
+    const scheduleTasksChapters = dbScheduleTasks.map((task, idx) => ({
+      id: `task-${idx + 1}`,
+      title: task.title,
+      subtitle: task.description || "",
+      videoIcon: "videoCircle",
+      exportIcon: "export",
+    }));
+    const episodesChapters = dbEpisodes.map((ep, idx) => ({
+      id: `episode-${ep.id}`,
+      title: ep.title,
+      subtitle: ep.description?.substring(0, 100) || "",
+      videoIcon: "videoCircle",
+      exportIcon: "export",
+    }));
+    const allChapters = [...scheduleTasksChapters, ...episodesChapters];
+    editionData = {
+      name: selectedDbEdition.name,
+      schedule: {
+        date: new Date(selectedDbEdition.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        dateTime: selectedDbEdition.date,
+      },
+      chapters: allChapters,
+    };
+  } else {
+    editionData = getEditionContent(selectedEdition as any);
+  }
   const { name: editionName, schedule, chapters } = editionData;
 
   const decorativeImages = [
@@ -125,6 +226,7 @@ export const TalentIntroductionSection = (): JSX.Element => {
           <EditionFilter
             selectedEdition={selectedEdition}
             onEditionChange={setSelectedEdition}
+            dbEditions={dbEditions}
           />
         </motion.div>
 

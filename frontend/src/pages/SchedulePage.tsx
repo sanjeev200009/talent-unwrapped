@@ -5,6 +5,16 @@ import {
 } from "../components";
 import { TheThreeChaptersSection } from "../features/podcasts";
 import SEO from "../components/common/SEO";
+import { useState, useEffect } from "react";
+import { fetchEditions, DbEdition } from "../services/api/client";
+
+const createEditionSlug = (name: string): string => {
+  return name
+    .toLowerCase()
+    .replace(/\s+edition\s*/gi, '')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
+};
 
 /**
  * Schedule Page - Fully Responsive
@@ -16,6 +26,20 @@ import SEO from "../components/common/SEO";
  * - FooterSection for copyright footer
  */
 export const SchedulePage = (): JSX.Element => {
+  const [dbEditions, setDbEditions] = useState<DbEdition[]>([]);
+
+  useEffect(() => {
+    const loadEditions = async () => {
+      try {
+        const editions = await fetchEditions();
+        setDbEditions(editions.filter(e => e.status === 'live'));
+      } catch (error) {
+        console.error("Failed to load editions:", error);
+      }
+    };
+    loadEditions();
+  }, []);
+
   return (
     <>
       <SEO
@@ -36,6 +60,17 @@ export const SchedulePage = (): JSX.Element => {
 
             {/* Dubai Edition - Three Chapters */}
             <TheThreeChaptersSection edition="dubai" hideTopSection={true} />
+
+            {/* DB Editions - Three Chapters */}
+            {dbEditions.map((edition) => (
+              <TheThreeChaptersSection 
+                key={edition.id} 
+                edition={createEditionSlug(edition.name) as any} 
+                hideTopSection={true}
+                dbEditionId={edition.id}
+                dbEditionName={edition.name}
+              />
+            ))}
           </div>
         </div>
 

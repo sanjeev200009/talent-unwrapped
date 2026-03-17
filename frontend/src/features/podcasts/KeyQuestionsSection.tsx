@@ -10,13 +10,15 @@ import {
 } from "@/data/episodeDetails";
 import { VideoCircleFilledIcon, ExportIcon } from "@/components/common/Icons";
 import { SECTION_TITLES, FORMS_CONTENT } from "@/constants/copy";
+import type { EpisodeSpeaker } from "@/types";
 
 interface KeyQuestionsSectionProps {
   edition?: "dubai" | "singapore" | "sri-lanka";
   episodeId?: string | number;
+  speakers?: EpisodeSpeaker[];
 }
 
-export const KeyQuestionsSection = ({ edition = "dubai", episodeId }: KeyQuestionsSectionProps): JSX.Element => {
+export const KeyQuestionsSection = ({ edition = "dubai", episodeId, speakers }: KeyQuestionsSectionProps): JSX.Element => {
   const [currentPage] = useState(0);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState<{
     [key: number]: number;
@@ -28,44 +30,88 @@ export const KeyQuestionsSection = ({ edition = "dubai", episodeId }: KeyQuestio
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
+  const SPEAKER_CUSTOM_CONTENT_MAP: Record<string, typeof AYIN_SHAH_JAHAN_CUSTOM_CONTENT> = {
+    "Ayin Shah Jahan": AYIN_SHAH_JAHAN_CUSTOM_CONTENT,
+    "Sumudu Thanthirigoda": SUMUDU_THANTHIRIGODA_CUSTOM_CONTENT,
+    "Surani Amarasinghe": SURANI_AMARASINGHE_CUSTOM_CONTENT,
+    "Ashan Ransilige": ASHAN_RANSILIGE_CUSTOM_CONTENT,
+    "Inoka Dias": INOKA_DIAS_CUSTOM_CONTENT,
+    "Karthik Badrinath": KARTHIK_BADRINATH_CUSTOM_CONTENT,
+  };
+
+  // Check if speakers have questions from DB
+  const hasDbQuestions = speakers && speakers.length > 0 && speakers.some(s => s.questions && s.questions.length > 0);
+
+  // Create session from DB questions
+  const createDbQuestionsSession = () => {
+    if (!speakers || speakers.length === 0) return null;
+
+    const experts = speakers.map((speaker, index) => ({
+      profile: {
+        id: `speaker-${index}`,
+        name: speaker.name,
+        title: speaker.role || "",
+        subtitle: "",
+        linkedin: speaker.linkedinUrl || "",
+        imageUrl: speaker.avatar,
+      },
+      questions: (speaker.questions || []).map(q => ({ q, answer: "" })),
+    }));
+
+    return {
+      ...baseContent[0],
+      experts,
+    };
+  };
+
   // Get base content
   const baseContent = getSessionContentByEdition(edition);
   let currentSession = baseContent[currentPage];
 
-  // Helper to create custom session
-  const createCustomSession = (content: typeof AYIN_SHAH_JAHAN_CUSTOM_CONTENT) => {
-    const customExpert = {
-      profile: {
-        id: `${content.expertName.toLowerCase().replace(/\s+/g, '-')}-custom`,
-        name: content.expertName,
-        title: content.expertTitle,
-        subtitle: content.expertSubtitle,
-        linkedin: content.linkedin,
-        imageUrl: content.imageUrl,
-      },
-      questions: content.questions,
+  // Priority: 1. DB questions, 2. Hardcoded speaker content, 3. Generic edition content
+  if (hasDbQuestions) {
+    const dbSession = createDbQuestionsSession();
+    if (dbSession) {
+      currentSession = dbSession;
+    }
+  } else {
+    // Helper to create custom session
+    const createCustomSession = (content: typeof AYIN_SHAH_JAHAN_CUSTOM_CONTENT) => {
+      const customExpert = {
+        profile: {
+          id: `${content.expertName.toLowerCase().replace(/\s+/g, '-')}-custom`,
+          name: content.expertName,
+          title: content.expertTitle,
+          subtitle: content.expertSubtitle,
+          linkedin: content.linkedin,
+          imageUrl: content.imageUrl,
+        },
+        questions: content.questions,
+      };
+      return {
+        ...currentSession,
+        experts: [customExpert],
+      };
     };
-    return {
-      ...currentSession,
-      experts: [customExpert],
-    };
-  };
 
-  // Override for specific episodes
-  const epId = String(episodeId);
-  if (epId === "3") {
-    currentSession = createCustomSession(AYIN_SHAH_JAHAN_CUSTOM_CONTENT);
-  } else if (epId === "4") {
-    currentSession = createCustomSession(SUMUDU_THANTHIRIGODA_CUSTOM_CONTENT);
-  } else if (epId === "5") {
-    currentSession = createCustomSession(SURANI_AMARASINGHE_CUSTOM_CONTENT);
-  } else if (epId === "6") {
-    currentSession = createCustomSession(ASHAN_RANSILIGE_CUSTOM_CONTENT);
-  } else if (epId === "7") {
-    currentSession = createCustomSession(INOKA_DIAS_CUSTOM_CONTENT);
-  } else if (epId === "8") {
-    currentSession = createCustomSession(KARTHIK_BADRINATH_CUSTOM_CONTENT);
+    // Check for matching speaker by name in hardcoded content
+    const epId = String(episodeId);
+    if (epId === "3") {
+      currentSession = createCustomSession(AYIN_SHAH_JAHAN_CUSTOM_CONTENT);
+    } else if (epId === "4") {
+      currentSession = createCustomSession(SUMUDU_THANTHIRIGODA_CUSTOM_CONTENT);
+    } else if (epId === "5") {
+      currentSession = createCustomSession(SURANI_AMARASINGHE_CUSTOM_CONTENT);
+    } else if (epId === "6") {
+      currentSession = createCustomSession(ASHAN_RANSILIGE_CUSTOM_CONTENT);
+    } else if (epId === "7") {
+      currentSession = createCustomSession(INOKA_DIAS_CUSTOM_CONTENT);
+    } else if (epId === "8") {
+      currentSession = createCustomSession(KARTHIK_BADRINATH_CUSTOM_CONTENT);
+    }
   }
+
+  const hasCustomContent = hasDbQuestions || (episodeId && ["3", "4", "5", "6", "7", "8"].includes(String(episodeId)));
 
   // Minimum swipe distance (in px)
   const minSwipeDistance = 50;
@@ -143,7 +189,7 @@ export const KeyQuestionsSection = ({ edition = "dubai", episodeId }: KeyQuestio
           </div>
 
           {/* Session Description - Hidden for Dubai as requested, and also hidden for customized episodes */}
-          {edition !== "dubai" && !["3", "4", "5", "6", "7", "8"].includes(epId) && (
+          {edition !== "dubai" && !hasCustomContent && (
             <div className="mb-8 sm:mb-10">
               <p className="[font-family:'Geist',Helvetica] font-normal text-[#8d8d8d] text-base sm:text-lg md:text-xl leading-relaxed mb-4 sm:mb-5">
                 {currentSession.sessionDescription}

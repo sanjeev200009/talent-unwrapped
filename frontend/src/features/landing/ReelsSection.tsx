@@ -1,22 +1,86 @@
 import { useEffect, useRef, useState } from "react";
 import { REELS_DATA } from "@/data";
 import { BackArrowIcon, NextArrowIcon } from "@/components/common/Icons";
+import { fetchReelsByEpisode, transformDbReelToReel } from "@/services/api/client";
+
+/**
+ * Helper to transform YouTube URLs into embed URLs
+ */
+const getEmbedUrl = (url: string, autoplay: boolean = true, mute: boolean = true): string => {
+  if (!url) return '';
+  
+  try {
+    let videoId = '';
+    
+    // Already an embed URL - extract video ID
+    if (url.includes("youtube.com/embed/")) {
+      const match = url.match(/embed\/([^/?]+)/);
+      videoId = match?.[1] || '';
+    }
+    // youtu.be short URLs
+    else if (url.includes("youtu.be/")) {
+      const match = url.match(/youtu\.be\/([^/?]+)/);
+      videoId = match?.[1] || '';
+    }
+    // youtube.com/watch?v= URLs
+    else if (url.includes("youtube.com/watch")) {
+      const urlObj = new URL(url);
+      videoId = urlObj.searchParams.get("v") || '';
+    }
+    // YouTube Shorts URLs (youtube.com/shorts/)
+    else if (url.includes("youtube.com/shorts/")) {
+      const match = url.match(/shorts\/([^/?]+)/);
+      videoId = match?.[1] || '';
+    }
+    
+    // If we have a valid video ID, return the embed URL
+    if (videoId) {
+      const autoplayParam = autoplay ? "1" : "0";
+      const muteParam = mute ? "1" : "0";
+      return `https://www.youtube.com/embed/${videoId}?autoplay=${autoplayParam}&mute=${muteParam}&rel=0&playsinline=1&modestbranding=1&iv_load_policy=3&controls=1&loop=1`;
+    }
+    
+    // Return original URL if no known format
+    return url;
+  } catch (e) {
+    console.error('Error parsing YouTube URL:', e);
+    return url;
+  }
+};
 
 interface ReelsSectionProps {
   edition?: "Dubai" | "Singapore" | "Sri Lanka";
+  episodeId?: string | number;
 }
 
-export const ReelsSection = ({ edition }: ReelsSectionProps): JSX.Element => {
+export const ReelsSection = ({ edition, episodeId }: ReelsSectionProps): JSX.Element => {
   const sectionRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const slideRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const [dbReels, setDbReels] = useState<ReturnType<typeof transformDbReelToReel>[]>([]);
 
-  // Filter reels based on edition if provided
-  const reelVideos = edition
-    ? REELS_DATA.filter((reel) => reel.edition === edition)
-    : REELS_DATA;
+  // Fetch reels from DB if episodeId is provided
+  useEffect(() => {
+    const loadDbReels = async () => {
+      if (episodeId) {
+        const reels = await fetchReelsByEpisode(String(episodeId));
+        setDbReels(reels.map(transformDbReelToReel));
+      } else {
+        setDbReels([]);
+      }
+    };
+    loadDbReels();
+  }, [episodeId]);
+
+  // Filter reels: prioritize DB reels for episode, then hardcoded for valid editions
+  // For DB editions without DB reels, show nothing (empty array)
+  const reelVideos = episodeId && dbReels.length > 0
+    ? dbReels
+    : edition && !edition.includes(' ') // Only use hardcoded edition if it's a simple name (Dubai, Singapore, Sri Lanka)
+      ? REELS_DATA.filter((reel) => reel.edition === edition)
+      : []; // For DB editions or invalid editions, show nothing (no fallback to all reels)
 
   // Track active slide using IntersectionObserver (more accurate for mobile)
   useEffect(() => {
@@ -94,6 +158,11 @@ export const ReelsSection = ({ edition }: ReelsSectionProps): JSX.Element => {
     }
   };
 
+  // Don't render if there are no reels to show
+  if (reelVideos.length === 0) {
+    return null;
+  }
+
   return (
     <section
       id="reels"
@@ -133,17 +202,18 @@ export const ReelsSection = ({ edition }: ReelsSectionProps): JSX.Element => {
                 lg:w-[calc((100%-72px)/3.5)] lg:h-[850px] lg:snap-align-none transition-all duration-300 transform hover:scale-[1.02] hover:z-10 origin-center"
                 onMouseEnter={() => setPlayingIndex(index)}
                 onMouseLeave={() => setPlayingIndex(null)}
+                onClick={() => window.open(reel.videoUrl, '_blank')}
               >
                 {/* Media Container */}
                 <div className="absolute inset-0 w-full h-full bg-black">
                   {playingIndex === index ? (
                     <iframe
-                      src={`${reel.videoUrl}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0&playsinline=1&loop=1`}
+                      src={getEmbedUrl(reel.videoUrl, true, true)}
                       className="w-full h-full"
                       allow="autoplay; fullscreen; picture-in-picture"
                       allowFullScreen
                       title={reel.title}
-                      style={{ border: 'none', pointerEvents: 'none' }}
+                      style={{ border: 'none' }}
                     />
                   ) : (
                     <img

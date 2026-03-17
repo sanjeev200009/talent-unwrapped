@@ -19,32 +19,50 @@ import {
   PlayIcon,
 } from "@/components/common/Icons";
 import { HERO_CONTENT } from "@/constants/copy";
-import { getVideoSlidesByEdition, getEpisodeById, getEpisodesByEdition } from "@/data";
+import { getVideoSlidesByEdition, getEpisodeById, getEpisodesByEdition, getEpisodeByIdMixed, getAllEpisodesMerged } from "@/data";
 import { EpisodeSpeaker, Speaker, Episode } from "@/types";
 import SEO from "../components/common/SEO";
 
 /**
  * Helper to transform YouTube URLs into embed URLs
  */
-const getEmbedUrl = (url: string, autoplay: boolean = true) => {
+const getEmbedUrl = (url: string, autoplay: boolean = true): string => {
+  if (!url) return '';
+  
   try {
-    const autoplayParam = autoplay ? "autoplay=1" : "autoplay=0";
-    const baseParams = `&rel=0&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&modestbranding=1&iv_load_policy=3&widget_referrer=${encodeURIComponent(window.location.href)}`;
-
-    if (url.includes("youtube.com/embed")) {
-      return `${url.split('?')[0]}?${autoplayParam}${baseParams}`;
+    let videoId = '';
+    
+    // Already an embed URL - extract video ID
+    if (url.includes("youtube.com/embed/")) {
+      const match = url.match(/embed\/([^/?]+)/);
+      videoId = match?.[1] || '';
     }
-    if (url.includes("youtu.be")) {
-      const videoId = url.split("youtu.be/")[1]?.split("?")[0];
-      return videoId ? `https://www.youtube.com/embed/${videoId}?${autoplayParam}${baseParams}` : url;
+    // youtu.be short URLs
+    else if (url.includes("youtu.be/")) {
+      const match = url.match(/youtu\.be\/([^/?]+)/);
+      videoId = match?.[1] || '';
     }
-    if (url.includes("youtube.com/watch")) {
+    // youtube.com/watch?v= URLs
+    else if (url.includes("youtube.com/watch")) {
       const urlObj = new URL(url);
-      const videoId = urlObj.searchParams.get("v");
-      return videoId ? `https://www.youtube.com/embed/${videoId}?${autoplayParam}${baseParams}` : url;
+      videoId = urlObj.searchParams.get("v") || '';
     }
+    // YouTube Shorts URLs (youtube.com/shorts/)
+    else if (url.includes("youtube.com/shorts/")) {
+      const match = url.match(/shorts\/([^/?]+)/);
+      videoId = match?.[1] || '';
+    }
+    
+    // If we have a valid video ID, return the embed URL
+    if (videoId) {
+      const autoplayParam = autoplay ? "1" : "0";
+      return `https://www.youtube.com/embed/${videoId}?autoplay=${autoplayParam}&rel=0&playsinline=1&modestbranding=1&iv_load_policy=3`;
+    }
+    
+    // Return original URL if no known format
     return url;
   } catch (e) {
+    console.error('Error parsing YouTube URL:', e);
     return url;
   }
 };
@@ -80,6 +98,8 @@ export const FullEpisodePage = (): JSX.Element => {
   const location = useLocation();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [episode, setEpisode] = useState<Episode | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const sectionRef = useRef<HTMLDivElement | null>(null);
 
@@ -91,29 +111,114 @@ export const FullEpisodePage = (): JSX.Element => {
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  // Get the specific episode data if episodeId is provided
-  const episode = episodeId ? getEpisodeById(episodeId) : undefined;
+  useEffect(() => {
+    const loadEpisode = async () => {
+      if (!episodeId) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        const ep = await getEpisodeByIdMixed(episodeId);
+        setEpisode(ep);
+      } catch (error) {
+        console.error("Failed to load episode:", error);
+        setEpisode(getEpisodeById(episodeId));
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Determine edition by checking lists
+    loadEpisode();
+  }, [episodeId]);
+
+  // Stop video when section leaves viewport
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) {
+          setIsPlaying(false);
+          if (videoRef.current) {
+            videoRef.current.pause();
+            videoRef.current.currentTime = 0;
+          }
+        }
+      },
+      { threshold: 0 },
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => {
+      if (sectionRef.current) {
+        observer.unobserve(sectionRef.current);
+      }
+    };
+  }, []);
+
+  // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // Handle local video playback via ref
+  useEffect(() => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.play().catch(console.error);
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isPlaying]);
+
+  // Determine edition by checking lists - including DB episodes
   let detectedEdition = location.state?.edition;
   if (!detectedEdition && episode) {
+    // First check hardcoded episodes
     if (getEpisodesByEdition("dubai").some((ep: Episode) => ep.id === episode.id)) detectedEdition = "Dubai";
     else if (getEpisodesByEdition("singapore").some((ep: Episode) => ep.id === episode.id)) detectedEdition = "Singapore";
     else if (getEpisodesByEdition("sri-lanka").some((ep: Episode) => ep.id === episode.id)) detectedEdition = "Sri Lanka";
+    // For DB episodes, use the edition from the episode object
+    else if (episode.edition) detectedEdition = episode.edition;
   }
 
   const edition = detectedEdition || "Dubai";
 
   // For backward compatibility and specialized content
   const editionKey = edition.toLowerCase() === "sri lanka" || edition.toLowerCase() === "sri-lanka" || edition.toLowerCase() === "colombo" ? "sri-lanka" : edition.toLowerCase() as "dubai" | "singapore" | "sri-lanka";
+
+  // Hardcoded edition names for checking
+  const hardcodedEditionNames = ['dubai', 'singapore', 'sri lanka', 'sri-lanka', 'colombo'];
+  const isHardcodedEdition = hardcodedEditionNames.includes(editionKey);
+
+  // For ReelsSection - only pass hardcoded edition types, undefined for DB editions
+  const reelsEdition = isHardcodedEdition && editionKey !== "sri-lanka" 
+    ? edition as "Dubai" | "Singapore" 
+    : undefined;
+
+  // Show loading state while fetching episode
+  if (loading) {
+    return (
+      <main className="flex flex-col items-center relative w-full bg-white">
+        <GlobalHeader />
+        <div className="w-full h-[50vh] flex items-center justify-center">
+          <div className="text-gray-500">Loading episode...</div>
+        </div>
+      </main>
+    );
+  }
+
   const videoSlides = getVideoSlidesByEdition(editionKey);
 
   // Use the specific episode's video content if available, otherwise fall back to edition slides
   const currentVideo = {
-    id: episode?.id ? Number(episode.id) : videoSlides[0].id,
-    title: episode?.title || videoSlides[0].title,
-    videoUrl: episode?.videoUrl || videoSlides[0].videoUrl,
-    thumbnail: episode?.image || videoSlides[0].thumbnail,
+    id: episode?.id ? String(episode.id) : videoSlides[0]?.id || 1,
+    title: episode?.title || videoSlides[0]?.title || "Episode",
+    videoUrl: episode?.videoUrl || videoSlides[0]?.videoUrl || "",
+    thumbnail: episode?.image || videoSlides[0]?.thumbnail || "",
   };
 
   // Episode Schema
@@ -164,48 +269,6 @@ export const FullEpisodePage = (): JSX.Element => {
     setIsPlaying(true);
   };
 
-  // Stop video when section leaves viewport
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) {
-          setIsPlaying(false);
-          if (videoRef.current) {
-            videoRef.current.pause();
-            videoRef.current.currentTime = 0;
-          }
-        }
-      },
-      { threshold: 0 },
-    );
-
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current);
-    }
-
-    return () => {
-      if (sectionRef.current) {
-        observer.unobserve(sectionRef.current);
-      }
-    };
-  }, []);
-
-  // Scroll to top on mount
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
-  // Handle local video playback via ref
-  useEffect(() => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.play().catch(console.error);
-      } else {
-        videoRef.current.pause();
-      }
-    }
-  }, [isPlaying]);
-
   const content = (
     <div
       className="flex flex-col items-center relative w-full overflow-x-clip"
@@ -232,7 +295,7 @@ export const FullEpisodePage = (): JSX.Element => {
                     <>
                       <iframe
                         className="w-full h-full object-cover"
-                        src={getEmbedUrl(currentVideo.videoUrl || "", true)}
+                        src={getEmbedUrl(currentVideo.videoUrl, true)}
                         title={currentVideo.title}
                         frameBorder="0"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -366,16 +429,34 @@ export const FullEpisodePage = (): JSX.Element => {
                 <>
                   {currentVideo.videoUrl.includes("youtube") || currentVideo.videoUrl.includes("youtu.be") ? (
                     <>
-                      <iframe
-                        className="w-full h-full object-cover"
-                        src={getEmbedUrl(currentVideo.videoUrl || "", true)}
-                        title={currentVideo.title}
-                        frameBorder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        scrolling="no"
-                        style={{ border: "none", overflow: "hidden", pointerEvents: "auto" }}
-                      />
+                      {(() => {
+                        const embedUrl = getEmbedUrl(currentVideo.videoUrl, true);
+                        if (!embedUrl.includes('youtube.com/embed')) {
+                          return (
+                            <video
+                              ref={videoRef}
+                              className="w-full h-full object-cover"
+                              src={currentVideo.videoUrl}
+                              preload="metadata"
+                              playsInline
+                              onEnded={handleVideoEnded}
+                              controls={true}
+                            />
+                          );
+                        }
+                        return (
+                          <iframe
+                            className="w-full h-full object-cover"
+                            src={embedUrl}
+                            title={currentVideo.title}
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            scrolling="no"
+                            style={{ border: "none", overflow: "hidden", pointerEvents: "auto" }}
+                          />
+                        );
+                      })()}
                       <div
                         className="absolute inset-0 z-30 cursor-pointer bg-transparent"
                         style={{ height: '85%' }}
@@ -518,19 +599,22 @@ export const FullEpisodePage = (): JSX.Element => {
 
         {/* Key Questions Section */}
         <div className="w-full overflow-x-clip">
-          <KeyQuestionsSection edition={editionKey} episodeId={episode?.id} />
+          <KeyQuestionsSection edition={editionKey} episodeId={episode?.id} speakers={episode?.speakers} />
         </div>
 
-        {/* Reels Section - Show only for Dubai and Singapore editions */}
-        {editionKey !== "sri-lanka" && (
+        {/* Reels Section - Show for Dubai/Singapore editions OR any DB episode with reels */}
+        {(editionKey !== "sri-lanka" || (episode && episode.id)) && (
           <div className="w-full overflow-x-clip">
-            <ReelsSection edition={edition as "Dubai" | "Singapore"} />
+            <ReelsSection 
+              edition={reelsEdition} 
+              episodeId={episodeId} 
+            />
           </div>
         )}
 
         {/* Episode Details Section - Outside layout for full-width scrolling text */}
         <div className={`w-full overflow-x-clip ${editionKey === "sri-lanka" ? "mt-[-20px] lg:mt-[-30px]" : ""}`}>
-          <EpisodeDetailsSection />
+          <EpisodeDetailsSection episodeImages={episode?.images} />
         </div>
 
         {/* About Section - The Three Chapters */}
