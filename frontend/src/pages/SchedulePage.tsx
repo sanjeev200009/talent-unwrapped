@@ -62,15 +62,27 @@ export const SchedulePage = (): JSX.Element => {
             <TheThreeChaptersSection edition="dubai" hideTopSection={true} />
 
             {/* DB Editions - Three Chapters */}
-            {dbEditions.map((edition) => (
-              <TheThreeChaptersSection 
-                key={edition.id} 
-                edition={createEditionSlug(edition.name) as any} 
-                hideTopSection={true}
-                dbEditionId={edition.id}
-                dbEditionName={edition.name}
-              />
-            ))}
+            {dbEditions.map((edition) => {
+              const editionImages = edition.image_url ? (() => {
+                try {
+                  const parsed = JSON.parse(edition.image_url);
+                  return Array.isArray(parsed) ? parsed : [parsed];
+                } catch {
+                  return [edition.image_url];
+                }
+              })() : [];
+              
+              return (
+                <TheThreeChaptersSection 
+                  key={edition.id} 
+                  edition={createEditionSlug(edition.name) as any} 
+                  hideTopSection={true}
+                  dbEditionId={edition.id}
+                  dbEditionName={edition.location || edition.name}
+                  editionImages={editionImages}
+                />
+              );
+            })}
           </div>
         </div>
 

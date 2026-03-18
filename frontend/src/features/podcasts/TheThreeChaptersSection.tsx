@@ -77,6 +77,9 @@ export const TheThreeChaptersSection = ({
   scheduleTasks = [],
   dbEditionId,
   dbEditionName,
+  dbEditionLocation,
+  dbEditionDescription,
+  editionImages = [],
 }: TheThreeChaptersSectionProps): JSX.Element => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -109,8 +112,20 @@ export const TheThreeChaptersSection = ({
   const editionData = getEditionContent(edition);
   const { name: hardcodedEditionName, schedule: hardcodedSchedule, chapters } = editionData;
 
-  // Use DB edition name if provided, otherwise use hardcoded
-  const editionName = dbEditionName || hardcodedEditionName;
+  // Determine if this is a DB edition (to decide whether to show "Edition" suffix)
+  const isDbEdition = !!(dbEditionLocation || dbEditionName);
+
+  // Use DB edition location if provided, otherwise use hardcoded
+  const getDisplayName = () => {
+    if (dbEditionLocation) {
+      return dbEditionLocation;
+    }
+    if (dbEditionName) {
+      return dbEditionName.replace(/\s*Edition\s*/gi, '').trim();
+    }
+    return hardcodedEditionName;
+  };
+  const editionDisplay = getDisplayName();
 
   // Use DB schedule tasks if provided, otherwise use hardcoded chapters
   const displayChapters = (localDbSchedule && localScheduleTasks.length > 0) || dbEditionId
@@ -128,37 +143,53 @@ export const TheThreeChaptersSection = ({
     ? formatScheduleDate(localDbSchedule?.start_date || '', localDbSchedule?.end_date)
     : hardcodedSchedule;
 
-  const decorativeImages = [
-    {
-      id: 1,
-      src: edition === "singapore"
+  const getFallbackImage = (id: number) => {
+    if (id === 1) {
+      return edition === "singapore"
         ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770709852/Unwrapped_thumbnail_-_Ella_2_r6uwdx.png"
         : edition === "sri-lanka"
           ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1771218003/1764928872339_j91re3.jpg"
-          : ASSETS.manInHeadphones,
-      alt: edition === "singapore" ? "Ella Sherman" : edition === "sri-lanka" ? "Sumudu Thanthirigoda" : "Man in headphones",
+          : ASSETS.manInHeadphones;
+    } else {
+      return edition === "singapore"
+        ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770709853/Unwrapped_thumbnail_-_Echo_1_g0i2ae.png"
+        : edition === "sri-lanka"
+          ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770883420/Frame_4449057_1_1_npu1wb.png"
+          : ASSETS.youngBlackMan;
+    }
+  };
+
+  const getAltText = (id: number) => {
+    if (id === 1) {
+      return edition === "singapore" ? "Ella Sherman" : edition === "sri-lanka" ? "Sumudu Thanthirigoda" : "Man in headphones";
+    } else {
+      return edition === "singapore" ? "Avik Ghosh" : edition === "sri-lanka" ? "Ayin Shah Jahan" : "Young black man in headphones";
+    }
+  };
+
+  const decorativeImages = [
+    {
+      id: 1,
+      src: editionImages.length > 0 ? editionImages[0] : getFallbackImage(1),
+      alt: getAltText(1),
       containerClass: `absolute ${isMobile ? "top-[260px] left-[10px]" : "top-[260px] lg:top-[170px] left-[5%] lg:left-[871px]"} w-[100px] h-[75px] lg:w-[152px] lg:h-[114px] z-0 lg:flex rounded-xl overflow-hidden shadow-[12px_12px_30px_#00000017] opacity-80 lg:opacity-100`,
       baseRotate: -7.30,
-      objectPosition: (edition === "singapore" || edition === "sri-lanka") ? "center center" : undefined,
-      imageScale: edition === "singapore" ? (isMobile ? 1.05 : 1.1) : edition === "sri-lanka" ? (isMobile ? 1.05 : 1.1) : (isMobile ? 1.8 : 2.2),
-      imageTranslateX: (edition === "singapore" || edition === "sri-lanka") ? "0px" : (isMobile ? "20px" : "40px"),
-      imageTranslateY: (edition === "singapore") ? "0px" : edition === "sri-lanka" ? (isMobile ? "10px" : "15px") : (isMobile ? "10px" : "25px"),
+      objectPosition: editionImages.length > 0 ? "center center" : (edition === "singapore" || edition === "sri-lanka") ? "center center" : undefined,
+      imageScale: editionImages.length > 0 ? 1 : (edition === "singapore" ? (isMobile ? 1.05 : 1.1) : edition === "sri-lanka" ? (isMobile ? 1.05 : 1.1) : (isMobile ? 1.8 : 2.2)),
+      imageTranslateX: editionImages.length > 0 ? "0px" : ((edition === "singapore" || edition === "sri-lanka") ? "0px" : (isMobile ? "20px" : "40px")),
+      imageTranslateY: editionImages.length > 0 ? "0px" : ((edition === "singapore") ? "0px" : edition === "sri-lanka" ? (isMobile ? "10px" : "15px") : (isMobile ? "10px" : "25px")),
       animY: isMobile ? [0, -8, 0] : [0, -15, 0],
     },
     {
       id: 2,
-      src: edition === "singapore"
-        ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770709853/Unwrapped_thumbnail_-_Echo_1_g0i2ae.png"
-        : edition === "sri-lanka"
-          ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770883420/Frame_4449057_1_1_npu1wb.png"
-          : ASSETS.youngBlackMan,
-      alt: edition === "singapore" ? "Avik Ghosh" : edition === "sri-lanka" ? "Ayin Shah Jahan" : "Young black man in headphones",
+      src: editionImages.length > 1 ? editionImages[1] : getFallbackImage(2),
+      alt: getAltText(2),
       containerClass: `absolute ${isMobile ? "top-[20px] right-[40px]" : "top-[140px] sm:left-[230px] lg:left-[1125px] right-[5%] lg:right-auto"} w-[110px] h-[83px] lg:w-[152px] lg:h-[114px] z-0 lg:flex rounded-xl overflow-hidden shadow-[12px_12px_30px_#00000017] opacity-80 lg:opacity-100`,
       baseRotate: 6.49,
-      objectPosition: (edition === "singapore" || edition === "sri-lanka") ? "center center" : undefined,
-      imageScale: edition === "singapore" ? (isMobile ? 1.05 : 1.1) : edition === "sri-lanka" ? (isMobile ? 1.05 : 1.1) : (isMobile ? 1.8 : 2.2),
-      imageTranslateX: (edition === "singapore" || edition === "sri-lanka") ? "0px" : (isMobile ? "20px" : "40px"),
-      imageTranslateY: (edition === "singapore") ? "0px" : edition === "sri-lanka" ? (isMobile ? "10px" : "15px") : (isMobile ? "10px" : "25px"),
+      objectPosition: editionImages.length > 1 ? "center center" : (edition === "singapore" || edition === "sri-lanka") ? "center center" : undefined,
+      imageScale: editionImages.length > 1 ? 1 : (edition === "singapore" ? (isMobile ? 1.05 : 1.1) : edition === "sri-lanka" ? (isMobile ? 1.05 : 1.1) : (isMobile ? 1.8 : 2.2)),
+      imageTranslateX: editionImages.length > 1 ? "0px" : ((edition === "singapore" || edition === "sri-lanka") ? "0px" : (isMobile ? "20px" : "40px")),
+      imageTranslateY: editionImages.length > 1 ? "0px" : ((edition === "singapore") ? "0px" : edition === "sri-lanka" ? (isMobile ? "10px" : "15px") : (isMobile ? "10px" : "25px")),
       animY: isMobile ? [0, -8, 0] : [0, -15, 0],
     },
   ];
@@ -246,11 +277,11 @@ export const TheThreeChaptersSection = ({
                   className="relative lg:absolute top-auto lg:top-0 left-0 lg:left-[400px] w-full lg:w-[904px] max-w-full text-center lg:text-left mb-6 lg:mb-0 [font-family:'Geist',Helvetica] font-medium text-transparent text-[18px] sm:text-[22px] md:text-[28px] lg:text-[34px] xl:text-[40px] tracking-[-0.02em] sm:tracking-[-0.025em] lg:tracking-[-0.03em] leading-[1.3] sm:leading-[1.35] lg:leading-[1.4]"
                 >
                   <span className="text-[#232323] tracking-[-0.77px]">
-                    {TALENT_INTRO_CONTENT.CHAPTER_PREFIX} {editionName} Edition{" "}
+                    {TALENT_INTRO_CONTENT.CHAPTER_PREFIX} {editionDisplay}{isDbEdition ? "" : " Edition"}{" "}
                   </span>
 
                   <span className="text-[#8d8d8d] tracking-[-0.77px]">
-                    {SECTION_DESCRIPTIONS.CHAPTER_EXPLORATION}
+                    {dbEditionDescription || SECTION_DESCRIPTIONS.CHAPTER_EXPLORATION}
                   </span>
                 </motion.p>
 
@@ -289,7 +320,7 @@ export const TheThreeChaptersSection = ({
         >
           <p className="relative w-full max-w-none lg:w-auto [font-family:'Geist',Helvetica] font-medium text-[20px] sm:text-[24px] md:text-[28px] lg:text-[36px] leading-[24px] sm:leading-[28px] md:leading-[32px] lg:leading-[42px] whitespace-normal lg:whitespace-nowrap">
             <span className="text-[#7cb403]">
-              {TALENT_INTRO_CONTENT.SCHEDULE_FOR} {editionName} Edition{" "}
+              {TALENT_INTRO_CONTENT.SCHEDULE_FOR} {editionDisplay}{isDbEdition ? "" : " Edition"}{" "}
             </span>
             <time className="text-[#ed2939]" dateTime={schedule.dateTime}>
               {schedule.date}

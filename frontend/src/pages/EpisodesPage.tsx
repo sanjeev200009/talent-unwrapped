@@ -60,8 +60,9 @@ export const EpisodesPage = (): JSX.Element => {
   const loadEpisodes = async () => {
     setLoading(true);
     try {
-      // Fetch editions to check their status
-      const liveDbEditions = dbEditions.length > 0 ? dbEditions : (await fetchEditions().catch(() => [])).filter(e => e.status === 'live');
+      // Fetch editions to check their status - always fetch fresh for filtering
+      const allEditions = await fetchEditions();
+      const liveDbEditions = allEditions.filter(e => e.status === 'live');
       const liveEditionNames = new Set(
         liveDbEditions
           .map(e => e.name.toLowerCase())
@@ -94,8 +95,8 @@ export const EpisodesPage = (): JSX.Element => {
             if (filter === "dubai") return edition === "dubai";
             if (filter === "singapore") return edition === "singapore";
             if (filter === "sri-lanka") return edition === "sri lanka" || edition === "colombo";
-            // Check if it's a DB edition
-            return edition === filter || createEditionSlug(ep.edition || '') === filter;
+            // Check if it's a DB edition - compare slugs
+            return createEditionSlug(ep.edition || '') === filter;
           });
       setEpisodes(byEdition);
     } catch (error) {
@@ -197,7 +198,7 @@ export const EpisodesPage = (): JSX.Element => {
                           : "text-gray-500 hover:text-gray-900"
                           }`}
                       >
-                        {edition.name}
+                        {edition.location || edition.name}
                       </button>
                     );
                   })}

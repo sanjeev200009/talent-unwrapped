@@ -4,6 +4,7 @@ import type { Episode } from "../types";
 export const EDITION_CONTENT = {
   singapore: {
     name: "Singapore",
+    description: "explores a different human dimension of ambition, design, and leadership.",
     schedule: {
       date: "12th, 13th Nov 2025",
       dateTime: "2025-11-12",
@@ -35,6 +36,7 @@ export const EDITION_CONTENT = {
   },
   dubai: {
     name: "Dubai",
+    description: "explores a different human dimension of ambition, design, and leadership.",
     schedule: {
       date: "15th, 16th Dec 2025",
       dateTime: "2025-12-15",
@@ -65,6 +67,7 @@ export const EDITION_CONTENT = {
   },
   "sri-lanka": {
     name: "Sri Lanka",
+    description: "explores a different human dimension of ambition, design, and leadership.",
     schedule: {
       date: "1st Sep 2025",
       dateTime: "2025-09-01",

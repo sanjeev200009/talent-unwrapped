@@ -39,6 +39,7 @@ export interface Episode {
   featured?: boolean;
   videoUrl?: string;
   edition?: string;
+  editionLocation?: string;
   images?: string[];
 }
 
@@ -68,6 +69,9 @@ export interface TheThreeChaptersSectionProps {
   scheduleTasks?: DbScheduleTask[];
   dbEditionId?: string;
   dbEditionName?: string;
+  dbEditionLocation?: string;
+  dbEditionDescription?: string;
+  editionImages?: string[];
 }
 
 // Contact form data

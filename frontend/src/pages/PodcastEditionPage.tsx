@@ -12,6 +12,10 @@ interface PodcastEditionPageProps {
   children?: React.ReactNode;
   schedule?: DbSchedule | null;
   scheduleTasks?: DbScheduleTask[];
+  editionImages?: string[];
+  dbEditionName?: string;
+  dbEditionLocation?: string;
+  dbEditionDescription?: string;
 }
 
 /**
@@ -26,6 +30,10 @@ export const PodcastEditionPage = ({
   children,
   schedule,
   scheduleTasks,
+  editionImages = [],
+  dbEditionName,
+  dbEditionLocation,
+  dbEditionDescription,
 }: PodcastEditionPageProps): JSX.Element => {
   const isDubai = edition === "dubai";
 
@@ -136,6 +144,10 @@ export const PodcastEditionPage = ({
         showFooter
         schedule={schedule}
         scheduleTasks={scheduleTasks}
+        editionImages={editionImages}
+        dbEditionName={dbEditionName}
+        dbEditionLocation={dbEditionLocation}
+        dbEditionDescription={dbEditionDescription}
       >
         {episodesContent}
       </EpisodeLayout>

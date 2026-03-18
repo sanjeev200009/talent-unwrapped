@@ -15,6 +15,10 @@ interface EpisodeLayoutProps {
   className?: string;
   schedule?: DbSchedule | null;
   scheduleTasks?: DbScheduleTask[];
+  editionImages?: string[];
+  dbEditionName?: string;
+  dbEditionLocation?: string;
+  dbEditionDescription?: string;
 }
 
 /**
@@ -37,6 +41,10 @@ export const EpisodeLayout = ({
   className = "",
   schedule,
   scheduleTasks,
+  editionImages = [],
+  dbEditionName,
+  dbEditionLocation,
+  dbEditionDescription,
 }: EpisodeLayoutProps): JSX.Element => {
   return (
     <main className="flex flex-col items-center relative bg-white w-full overflow-x-clip">
@@ -52,7 +60,7 @@ export const EpisodeLayout = ({
         )}
 
         {/* Chapters Section - Optional, shown by default - Full width without wrapper */}
-        {showChapters && edition && <TheThreeChaptersSection edition={edition} schedule={schedule} scheduleTasks={scheduleTasks} />}
+        {showChapters && edition && <TheThreeChaptersSection edition={edition} schedule={schedule} scheduleTasks={scheduleTasks} editionImages={editionImages} dbEditionName={dbEditionName} dbEditionLocation={dbEditionLocation} dbEditionDescription={dbEditionDescription} />}
       </div>
 
       {/* Contact Section - Optional, shown by default */}

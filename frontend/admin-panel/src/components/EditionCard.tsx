@@ -1,5 +1,41 @@
-import React from 'react';
-import { Archive, Edit2, MoreVertical, RotateCcw } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Archive, Edit2, MoreVertical, RotateCcw, Trash2 } from 'lucide-react';
+
+interface DeleteConfirmDialogProps {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({ isOpen, title, message, onConfirm, onCancel }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel}></div>
+      <div className="relative bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 md:p-8 max-w-md w-full mx-4 shadow-2xl animate-scale-in">
+        <h3 className="text-xl font-bold text-white mb-3">{title}</h3>
+        <p className="text-muted-foreground mb-6">{message}</p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-medium transition-all"
+          >
+            Delete Permanently
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface EditionCardProps {
   id: string;
@@ -9,9 +45,34 @@ interface EditionCardProps {
   status: string;
   onArchive?: (id: string) => void;
   onRestore?: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
-const EditionCard: React.FC<EditionCardProps> = ({ id, name, location, date, status, onArchive, onRestore }) => {
+const EditionCard: React.FC<EditionCardProps> = ({ id, name, location, date, status, onArchive, onRestore, onDelete }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleDeleteClick = () => {
+    setShowDropdown(false);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = () => {
+    onDelete?.(id);
+    setShowDeleteConfirm(false);
+  };
+
   return (
     <div className="glass-card p-8 md:p-14 flex flex-col justify-between group h-full">
       <div className="flex justify-between items-start mb-10 md:mb-12">
@@ -22,9 +83,43 @@ const EditionCard: React.FC<EditionCardProps> = ({ id, name, location, date, sta
         }`}>
           {status}
         </div>
-        <button className="p-2 md:p-3 rounded-xl text-muted-foreground hover:text-white hover:bg-white/5 transition-all">
-          <MoreVertical size={20} />
-        </button>
+        <div className="relative" ref={dropdownRef}>
+          <button 
+            onClick={() => setShowDropdown(!showDropdown)}
+            className="p-2 md:p-3 rounded-xl text-muted-foreground hover:text-white hover:bg-white/5 transition-all"
+          >
+            <MoreVertical size={20} />
+          </button>
+          {showDropdown && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden shadow-xl z-20">
+              {status !== 'archived' && (
+                <button
+                  onClick={() => { onArchive?.(id); setShowDropdown(false); }}
+                  className="w-full px-4 py-3 text-left text-sm text-white hover:bg-white/5 flex items-center gap-3 transition-colors"
+                >
+                  <Archive size={16} />
+                  Archive
+                </button>
+              )}
+              {status === 'archived' && (
+                <button
+                  onClick={() => { onRestore?.(id); setShowDropdown(false); }}
+                  className="w-full px-4 py-3 text-left text-sm text-white hover:bg-white/5 flex items-center gap-3 transition-colors"
+                >
+                  <RotateCcw size={16} />
+                  Restore
+                </button>
+              )}
+              <button
+                onClick={handleDeleteClick}
+                className="w-full px-4 py-3 text-left text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-3 transition-colors"
+              >
+                <Trash2 size={16} />
+                Delete Permanently
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       
       <div className="mb-10 md:mb-12 space-y-3 md:space-y-4">
@@ -64,6 +159,14 @@ const EditionCard: React.FC<EditionCardProps> = ({ id, name, location, date, sta
           )}
         </div>
       </div>
+
+      <DeleteConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete Edition Permanently"
+        message={`Are you sure you want to permanently delete "${name}"? This will also delete all episodes, speakers, schedules, and reels associated with this edition. This action cannot be undone.`}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 };

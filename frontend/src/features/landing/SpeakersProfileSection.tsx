@@ -6,28 +6,88 @@ import {
     LinkedinIcon,
 } from "@/components/common/Icons";
 import type { Speaker } from "@/types";
+import { DbEdition } from "@/services/api";
 
 interface SpeakersProfileSectionProps {
     edition?: "Dubai" | "Singapore" | "Sri Lanka";
     specificSpeakers?: Speaker[];
+    onFilterChange?: (filter: string) => void;
+    activeFilter?: string;
+    dbSpeakersMap?: Map<string, Speaker[]>;
+    dbEditions?: DbEdition[];
 }
 
-export const SpeakersProfileSection = ({ edition, specificSpeakers }: SpeakersProfileSectionProps): JSX.Element => {
+export const SpeakersProfileSection = ({ 
+    edition, 
+    specificSpeakers,
+    onFilterChange: externalFilterChange,
+    activeFilter: externalActiveFilter,
+    dbSpeakersMap,
+    dbEditions,
+}: SpeakersProfileSectionProps): JSX.Element => {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [activeFilter, setActiveFilter] = useState("All");
+    const [internalActiveFilter, setInternalActiveFilter] = useState("All");
     const isManualScrollRef = useRef(true);
+
+    const activeFilter = externalActiveFilter ?? internalActiveFilter;
 
     const allSpeakersData = LANDING_SPEAKERS_DATA;
 
-    // Filter speakers based on active tab
+    // Get all DB speakers combined
+    const getAllDbSpeakers = (): Speaker[] => {
+        if (!dbSpeakersMap) return [];
+        const allDbSpeakers: Speaker[] = [];
+        dbSpeakersMap.forEach((speakers) => {
+            allDbSpeakers.push(...speakers);
+        });
+        return allDbSpeakers;
+    };
+
+    const allDbSpeakers = getAllDbSpeakers();
+
+    // Get DB speakers for the current filter
+    const getDbSpeakersForFilter = (): Speaker[] | undefined => {
+        if (!dbSpeakersMap || !dbEditions) return undefined;
+        
+        if (activeFilter === "All") {
+            return allDbSpeakers.length > 0 ? allDbSpeakers : undefined;
+        }
+        
+        const dbEdition = dbEditions.find(e => {
+            // Match by name, slug, or location (display text)
+            const nameMatch = e.name.toLowerCase() === activeFilter.toLowerCase();
+            const locationMatch = e.location && e.location.toLowerCase() === activeFilter.toLowerCase();
+            return nameMatch || locationMatch;
+        });
+        if (dbEdition) {
+            return dbSpeakersMap.get(dbEdition.name);
+        }
+        return undefined;
+    };
+
+    const dbSpeakersForFilter = getDbSpeakersForFilter();
+
+    // Filter speakers based on active tab (only for hardcoded data)
     const filteredSpeakers = allSpeakersData.filter((speaker: Speaker) => {
         if (activeFilter === "All") return true;
         return speaker.edition === activeFilter;
     });
 
-    // Use specific speakers if provided, otherwise use filtered list
-    const speakers = specificSpeakers || filteredSpeakers;
+    // Priority: specificSpeakers > dbSpeakersForFilter + filtered list (combined)
+    // When "All" is selected, combine hardcoded + DB speakers
+    let speakers: Speaker[];
+    if (specificSpeakers) {
+        speakers = specificSpeakers;
+    } else if (dbSpeakersForFilter && dbSpeakersForFilter.length > 0) {
+        // Combine DB speakers with hardcoded filtered speakers
+        speakers = [...filteredSpeakers, ...dbSpeakersForFilter];
+    } else {
+        speakers = filteredSpeakers;
+    }
+
+    // Determine if we should show filter tabs - show on home page, hide in edition context
+    const showFilters = !edition;
 
     const ITEMS_PER_PAGE = 5;
     const totalPages = Math.ceil(speakers.length / ITEMS_PER_PAGE);
@@ -35,12 +95,20 @@ export const SpeakersProfileSection = ({ edition, specificSpeakers }: SpeakersPr
 
     // Reset pagination when filter changes
     const handleFilterChange = (filter: string) => {
-        setActiveFilter(filter);
+        setInternalActiveFilter(filter);
         setCurrentIndex(0);
         if (scrollContainerRef.current) {
             scrollContainerRef.current.scrollTo({ left: 0, behavior: "smooth" });
         }
+        if (externalFilterChange) {
+            externalFilterChange(filter);
+        }
     };
+
+    // Reset currentIndex when speakers change
+    useEffect(() => {
+        setCurrentIndex(0);
+    }, [activeFilter, dbSpeakersMap]);
 
     useEffect(() => {
         const container = scrollContainerRef.current;
@@ -158,12 +226,16 @@ export const SpeakersProfileSection = ({ edition, specificSpeakers }: SpeakersPr
                         </h2>
                     </header>
 
-                    {!edition && !specificSpeakers && (
+                    {showFilters && (
                         <nav
                             className="flex flex-wrap items-center gap-4 sm:gap-6 md:gap-8 relative flex-[0_0_auto]"
                             aria-label="Speaker categories"
                         >
-                            {["All", "Singapore", "Dubai", "Sri Lanka"].map((filter) => (
+                            {["All", "Singapore", "Dubai", "Sri Lanka", ...(dbEditions?.map(e => {
+                                // Remove "Edition" suffix for display
+                                const nameWithoutEdition = e.name.replace(/\s*Edition\s*/gi, '').trim();
+                                return nameWithoutEdition;
+                            }) || [])].map((filter) => (
                                 <button
                                     key={filter}
                                     onClick={() => handleFilterChange(filter)}

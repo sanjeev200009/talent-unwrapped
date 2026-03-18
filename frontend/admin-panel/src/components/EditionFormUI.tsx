@@ -25,6 +25,8 @@ interface EpisodeFormData {
   added_date: string;
   thumbnail_url: string;
   images: string[];
+  pendingImages?: File[];
+  imagesToDelete?: string[];
   speakers: SpeakerWithQuestions[];
   reels: PodcastReel[];
 }
@@ -51,6 +53,8 @@ interface EditionFormData {
   status: 'draft' | 'live' | 'archived';
   internal_notes?: string;
   image_urls: string[];
+  pendingImages?: File[];
+  imagesToDelete?: string[];
 }
 
 const FormSection: React.FC<{ title: string; icon: any; children: React.ReactNode }> = ({ title, icon: Icon, children }) => (
@@ -90,7 +94,9 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
     date: '',
     status: 'draft',
     internal_notes: '',
-    image_urls: []
+    image_urls: [],
+    pendingImages: [],
+    imagesToDelete: []
   });
 
   const [episodes, setEpisodes] = useState<EpisodeFormData[]>([
@@ -103,6 +109,8 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
       added_date: '',
       thumbnail_url: '',
       images: [],
+      pendingImages: [],
+      imagesToDelete: [],
       speakers: [{ id: '', name: '', role: '', linkedin: '', country: '', location: '', photo_url: '', questions: [{ id: 'new-0', text: '' }] }],
       reels: [{ id: '1', title: '', description: '', views: '', thumbnailUrl: '', url: '' }]
     }
@@ -164,13 +172,17 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
       setLoading(true);
       const edition = await editionsAPI.getById(id);
       let imageUrls: string[] = [];
-      if (edition.image_urls) {
-        imageUrls = edition.image_urls;
-      } else if (edition.image_url) {
-        try {
-          imageUrls = JSON.parse(edition.image_url);
-        } catch {
-          imageUrls = [edition.image_url];
+      const rawImageData = edition.image_url || edition.image_urls;
+      if (rawImageData) {
+        if (typeof rawImageData === 'string') {
+          try {
+            const parsed = JSON.parse(rawImageData);
+            imageUrls = Array.isArray(parsed) ? parsed : [parsed];
+          } catch {
+            imageUrls = [rawImageData];
+          }
+        } else if (Array.isArray(rawImageData)) {
+          imageUrls = rawImageData;
         }
       }
       setEditionData({
@@ -179,7 +191,9 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
         date: edition.date || '',
         status: edition.status || 'draft',
         internal_notes: edition.internal_notes || '',
-        image_urls: imageUrls
+        image_urls: imageUrls,
+        pendingImages: [],
+        imagesToDelete: []
       });
 
       const episodesData = await episodesAPI.getAll(id);
@@ -207,6 +221,8 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
             added_date: ep.added_date || '',
             thumbnail_url: ep.thumbnail_url || '',
             images: episodeImages,
+            pendingImages: [],
+            imagesToDelete: [],
             speakers: ep.speakers && ep.speakers.length > 0 
               ? ep.speakers.map((s: any) => ({
                   id: s.id || '',
@@ -267,30 +283,13 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
     setEditionData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleRemoveEditionImage = async (index: number) => {
+  const handleRemoveEditionImage = (index: number) => {
     const imageToRemove = editionData.image_urls[index];
     setEditionData(prev => ({
       ...prev,
-      image_urls: prev.image_urls.filter((_, i) => i !== index)
+      image_urls: prev.image_urls.filter((_, i) => i !== index),
+      imagesToDelete: imageToRemove ? [...(prev.imagesToDelete || []), imageToRemove] : (prev.imagesToDelete || [])
     }));
-    
-    if (isEditing && currentEditionId && imageToRemove) {
-      try {
-        const currentEdition = await editionsAPI.getById(currentEditionId);
-        let remainingImages = currentEdition.image_urls || [];
-        if (remainingImages.length === 0 && currentEdition.image_url) {
-          try {
-            remainingImages = JSON.parse(currentEdition.image_url);
-          } catch {
-            remainingImages = [currentEdition.image_url];
-          }
-        }
-        const updatedImages = remainingImages.filter((url: string) => url !== imageToRemove);
-        await editionsAPI.update(currentEditionId, { image_url: updatedImages.length > 0 ? JSON.stringify(updatedImages) : null });
-      } catch (err) {
-        console.error('Failed to delete image from database:', err);
-      }
-    }
   };
 
   const handleImageUpload = async (file: File) => {
@@ -311,9 +310,7 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
       const publicUrl = await uploadAPI.uploadImage(file, 'images', folder);
       
       if (publicUrl) {
-        if (uploadModal?.type === 'edition') {
-          setEditionData(prev => ({ ...prev, image_urls: [...prev.image_urls, publicUrl] }));
-        } else if (uploadModal?.type === 'speaker' && uploadModal.episodeIndex !== undefined && uploadModal.speakerIndex !== undefined) {
+        if (uploadModal?.type === 'speaker' && uploadModal.episodeIndex !== undefined && uploadModal.speakerIndex !== undefined) {
           handleUpdateSpeakerInEpisode(uploadModal.episodeIndex, uploadModal.speakerIndex, 'photo_url', publicUrl);
         } else if (uploadModal?.type === 'episode' && uploadModal.episodeIndex !== undefined) {
           handleUpdateEpisode(uploadModal.episodeIndex, 'thumbnail_url', publicUrl);
@@ -338,12 +335,48 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      await handleImageUpload(file);
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    if (uploadModal?.type === 'episodeImage' && uploadModal.episodeIndex !== undefined) {
+      const currentEpisodeIndex = uploadModal.episodeIndex;
+      const newFiles = Array.from(files);
+      
+      setEpisodes(prev => prev.map((ep, ei) => {
+        if (ei === currentEpisodeIndex) {
+          return {
+            ...ep,
+            pendingImages: [...(ep.pendingImages || []), ...newFiles]
+          };
+        }
+        return ep;
+      }));
+      
+      setUploadModal(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } else if (uploadModal?.type === 'edition') {
+      const newFiles = Array.from(files);
+      
+      setEditionData(prev => ({
+        ...prev,
+        pendingImages: [...(prev.pendingImages || []), ...newFiles],
+        image_urls: [...(prev.image_urls || []), ...newFiles.map(file => URL.createObjectURL(file))]
+      }));
+      
+      setUploadModal(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } else {
+      const file = files[0];
+      if (file) {
+        await handleImageUpload(file);
+      }
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -361,6 +394,8 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
       added_date: '',
       thumbnail_url: '',
       images: [],
+      pendingImages: [],
+      imagesToDelete: [],
       speakers: [{ id: '', name: '', role: '', linkedin: '', country: '', location: '', photo_url: '', questions: [{ id: `new-${Date.now()}`, text: '' }] }],
       reels: [{ id: Math.random().toString(36).substr(2, 9), title: '', description: '', views: '', thumbnailUrl: '', url: '' }]
     }]);
@@ -569,12 +604,24 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
   };
 
   const handleRemoveImageFromEpisode = (episodeIndex: number, imageIndex: number) => {
-    setEpisodes(episodes.map((ep, ei) => {
+    setEpisodes(prevEpisodes => prevEpisodes.map((ep, ei) => {
       if (ei === episodeIndex) {
-        return {
-          ...ep,
-          images: (ep.images || []).filter((_, i) => i !== imageIndex)
-        };
+        const existingCount = (ep.images || []).length;
+        
+        if (imageIndex < existingCount) {
+          const imageUrlToRemove = ep.images?.[imageIndex];
+          return {
+            ...ep,
+            images: (ep.images || []).filter((_, i) => i !== imageIndex),
+            imagesToDelete: imageUrlToRemove ? [...(ep.imagesToDelete || []), imageUrlToRemove] : (ep.imagesToDelete || [])
+          };
+        } else {
+          const pendingIndex = imageIndex - existingCount;
+          return {
+            ...ep,
+            pendingImages: (ep.pendingImages || []).filter((_, i) => i !== pendingIndex)
+          };
+        }
       }
       return ep;
     }));
@@ -627,13 +674,41 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
 
       let editionIdToUse = currentEditionId;
 
+      if (editionData.imagesToDelete && editionData.imagesToDelete.length > 0) {
+        for (const imgUrl of editionData.imagesToDelete) {
+          try {
+            if (imgUrl.includes('images') || imgUrl.includes('supabase')) {
+              await uploadAPI.deleteImage(imgUrl, 'images');
+            }
+          } catch (err) {
+            console.error('Failed to delete edition image:', err);
+          }
+        }
+      }
+
+      let finalEditionImages = [...editionData.image_urls];
+      if (editionData.pendingImages && editionData.pendingImages.length > 0) {
+        const folder = `edition/${editionData.name.toLowerCase().replace(/\s+/g, '-')}`;
+        for (const file of editionData.pendingImages) {
+          try {
+            const publicUrl = await uploadAPI.uploadImage(file, 'images', folder);
+            if (publicUrl) {
+              finalEditionImages.push(publicUrl);
+            }
+          } catch (err) {
+            console.error('Failed to upload edition image:', err);
+          }
+        }
+      }
+      finalEditionImages = finalEditionImages.filter(img => !img.startsWith('blob:') && !img.startsWith('data:'));
+
       const editionPayload = {
         name: editionData.name,
         location: editionData.location || null,
         date: editionData.date || new Date().toISOString().split('T')[0],
         status: editionData.status || 'draft',
         internal_notes: editionData.internal_notes || null,
-        image_url: editionData.image_urls.length > 0 ? JSON.stringify(editionData.image_urls) : null
+        image_url: finalEditionImages.length > 0 ? JSON.stringify(finalEditionImages) : null
       };
 
       if (isEditing && currentEditionId) {
@@ -641,8 +716,10 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
       } else {
         const newEdition = await editionsAPI.create(editionPayload);
         editionIdToUse = newEdition.id;
-        navigate(`/edition/edit/${editionIdToUse}`, { replace: true });
+        navigate(`/edition/edit/${editionIdToUse}`);
       }
+
+      setEditionData(prev => ({ ...prev, pendingImages: [], imagesToDelete: [] }));
 
       const existingEpisodes = await episodesAPI.getAll(editionIdToUse);
       const existingIds = new Set(existingEpisodes.map((ep: any) => ep.id));
@@ -653,8 +730,46 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
           await episodesAPI.delete(ep.id);
         }
       }
+
+      for (const episode of episodes) {
+        if (episode.imagesToDelete && episode.imagesToDelete.length > 0) {
+          for (const imgUrl of episode.imagesToDelete) {
+            try {
+              if (imgUrl.includes('images') || imgUrl.includes('supabase')) {
+                await uploadAPI.deleteImage(imgUrl, 'images');
+              }
+            } catch (err) {
+              console.error('Failed to delete image:', err);
+            }
+          }
+        }
+      }
+
+      const episodesToSave = await Promise.all(
+        episodes.filter(ep => ep.title.trim()).map(async (episode) => {
+          let finalImages = [...(episode.images || [])];
+          
+          if (episode.pendingImages && episode.pendingImages.length > 0) {
+            const episodeTitle = episode.title || 'untitled';
+            const folder = `episode/${episodeTitle.toLowerCase().replace(/\s+/g, '-')}`;
+            
+            for (const file of episode.pendingImages) {
+              try {
+                const publicUrl = await uploadAPI.uploadImage(file, 'images', folder);
+                if (publicUrl) {
+                  finalImages.push(publicUrl);
+                }
+              } catch (err) {
+                console.error('Failed to upload image:', err);
+              }
+            }
+          }
+          
+          return { ...episode, images: finalImages, pendingImages: [], imagesToDelete: [] };
+        })
+      );
       
-      for (const episode of episodes.filter(ep => ep.title.trim())) {
+      for (const episode of episodesToSave) {
         let episodeId: string;
         
         if (episode.id && existingIds.has(episode.id)) {
@@ -854,25 +969,39 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
             </select>
           </div>
           <div className="space-y-3">
-            <label className="label">Edition Images</label>
-            <div className="flex flex-wrap gap-3">
-              {editionData.image_urls.map((url, index) => (
-                <div key={index} className="relative w-24 h-24 rounded-xl overflow-hidden border border-white/10 group">
-                  <img src={url} alt={`Edition ${index + 1}`} className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveEditionImage(index)}
-                    className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X size={14} />
-                  </button>
+            <label className="label">Edition Images - {editionData.image_urls?.length || 0}</label>
+            <div className="min-h-[100px] bg-white/5 rounded-xl border border-white/10 p-4 flex flex-nowrap gap-3 overflow-x-auto">
+              {(!editionData.image_urls || editionData.image_urls.length === 0) ? (
+                <div className="flex items-center justify-center w-full text-muted-foreground text-sm">
+                  No images added yet. Click "Add Images" to upload.
                 </div>
-              ))}
+              ) : (
+                <>
+                  {editionData.image_urls.map((url, index) => {
+                    const isNewImage = url.startsWith('blob:') || url.startsWith('data:');
+                    return (
+                      <div key={index} className={`relative group flex-shrink-0 w-32 sm:w-40 aspect-video rounded-lg overflow-hidden border ${isNewImage ? 'border-yellow-500/30 border-dashed' : 'border-white/10'}`}>
+                        <img src={url} alt={`Edition ${index + 1}`} className="w-full h-full object-cover" />
+                        {isNewImage && (
+                          <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-yellow-500/80 text-[10px] text-white rounded">New</div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEditionImage(index)}
+                          className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
               <div 
                 onClick={() => setUploadModal({ type: 'edition' })}
-                className="w-24 h-24 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center cursor-pointer hover:border-[#7bb302]/50 transition-colors"
+                className="flex-shrink-0 w-32 sm:w-40 aspect-video rounded-lg bg-white/5 border border-dashed border-white/20 flex items-center justify-center cursor-pointer hover:border-[#7bb302]/50 transition-colors"
               >
-                <Plus size={24} className="text-muted-foreground opacity-50" />
+                <Plus size={20} className="text-muted-foreground opacity-50" />
               </div>
             </div>
             <p className="text-xs text-muted-foreground">Click + to add more images</p>
@@ -981,7 +1110,7 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
                 </div>
               </div>
 
-              <div className="space-y-3 pt-4 border-t border-white/10">
+                <div className="space-y-3 pt-4 border-t border-white/10">
                 <div className="flex items-center justify-between">
                   <h5 className="text-white font-bold">Episode Images</h5>
                   <button
@@ -989,30 +1118,49 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
                     onClick={() => setUploadModal({ type: 'episodeImage', episodeIndex })}
                     className="text-sm text-[#7bb302] hover:text-[#6da002] flex items-center gap-1"
                   >
-                    <Plus size={16} /> Add Image
+                    <Plus size={16} /> Add Images
                   </button>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {(episode.images || []).map((img, imgIndex) => (
-                    <div key={imgIndex} className="relative group aspect-video rounded-lg overflow-hidden bg-white/5 border border-white/10">
-                      <img src={img} alt={`Episode image ${imgIndex + 1}`} className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImageFromEpisode(episodeIndex, imgIndex)}
-                        className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-                  {(episode.images || []).length === 0 && (
-                    <div 
-                      onClick={() => setUploadModal({ type: 'episodeImage', episodeIndex })}
-                      className="aspect-video rounded-lg bg-white/5 border border-dashed border-white/20 flex items-center justify-center cursor-pointer hover:border-[#7bb302]/50 transition-colors"
-                    >
-                      <Plus size={20} className="text-muted-foreground opacity-50" />
+                <div className="min-h-[100px] bg-white/5 rounded-xl border border-white/10 p-4 flex flex-nowrap gap-3 overflow-x-auto">
+                  {((episode.images && episode.images.length > 0) || (episode.pendingImages && episode.pendingImages.length > 0)) ? (
+                    <>
+                      {(episode.images || []).map((img, imgIndex) => (
+                        <div key={`existing-${imgIndex}`} className="relative group flex-shrink-0 w-32 sm:w-40 aspect-video rounded-lg overflow-hidden bg-white/5 border border-white/10">
+                          <img src={img} alt={`Episode image ${imgIndex + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImageFromEpisode(episodeIndex, imgIndex)}
+                            className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                      {(episode.pendingImages || []).map((file, pendingIndex) => (
+                        <div key={`pending-${pendingIndex}`} className="relative group flex-shrink-0 w-32 sm:w-40 aspect-video rounded-lg overflow-hidden bg-white/5 border border-yellow-500/30 border-dashed">
+                          <img src={URL.createObjectURL(file)} alt={`Pending image ${pendingIndex + 1}`} className="w-full h-full object-cover" />
+                          <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-yellow-500/80 text-[10px] text-white rounded">New</div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImageFromEpisode(episodeIndex, (episode.images?.length || 0) + pendingIndex)}
+                            className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center w-full text-muted-foreground text-sm">
+                      No images added yet. Click "Add Images" to upload.
                     </div>
                   )}
+                  <div 
+                    onClick={() => setUploadModal({ type: 'episodeImage', episodeIndex })}
+                    className="flex-shrink-0 w-32 sm:w-40 aspect-video rounded-lg bg-white/5 border border-dashed border-white/20 flex items-center justify-center cursor-pointer hover:border-[#7bb302]/50 transition-colors"
+                  >
+                    <Plus size={20} className="text-muted-foreground opacity-50" />
+                  </div>
                 </div>
               </div>
 
@@ -1244,15 +1392,14 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
             </button>
             
             <div className="text-center space-y-2">
-              <div className="w-16 h-16 bg-[#7bb302]/20 rounded-2xl mx-auto flex items-center justify-center text-[#7bb302] mb-4">
-                <Film size={32} />
-              </div>
-              <h3 className="text-xl font-bold text-white">Upload Image</h3>
-              <p className="text-muted-foreground text-sm">
-                Select an image for {uploadModal.type === 'edition' ? 'the edition' : uploadModal.type === 'speaker' ? 'the speaker' : uploadModal.type === 'episode' ? 'the episode thumbnail' : 'the reel thumbnail'}
-              </p>
+              <Film size={32} />
             </div>
-
+            <h3 className="text-xl font-bold text-white">{uploadModal.type === 'episodeImage' ? 'Upload Images' : 'Upload Image'}</h3>
+            <p className="text-muted-foreground text-sm">
+              {uploadModal.type === 'episodeImage' 
+                ? 'Select one or more images for the episode' 
+                : `Select an image for ${uploadModal.type === 'edition' ? 'the edition' : uploadModal.type === 'speaker' ? 'the speaker' : uploadModal.type === 'episode' ? 'the episode thumbnail' : 'the reel thumbnail'}`}
+            </p>
             <div 
               onClick={handleConfirmUpload}
               className="border-2 border-dashed border-white/20 rounded-xl p-8 text-center cursor-pointer hover:border-[#7bb302]/50 hover:bg-[#7bb302]/5 transition-all"
@@ -1284,6 +1431,8 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
                     handleUpdateEpisode(uploadModal.episodeIndex, 'thumbnail_url', url);
                   } else if (uploadModal?.type === 'reel' && uploadModal.episodeIndex !== undefined && uploadModal.reelId) {
                     handleUpdateReelInEpisode(uploadModal.episodeIndex, uploadModal.reelId, 'thumbnailUrl', url);
+                  } else if (uploadModal?.type === 'episodeImage' && uploadModal.episodeIndex !== undefined) {
+                    handleAddImageToEpisode(uploadModal.episodeIndex, url);
                   }
                   setUploadModal(null);
                 }}
@@ -1304,6 +1453,7 @@ const EditionFormUI: React.FC<EditionFormUIProps> = ({ isEditing, editionId }) =
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={handleFileChange}
       />

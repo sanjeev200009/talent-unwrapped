@@ -20,6 +20,47 @@ const createEditionSlug = (name: string): string => {
     .replace(/[^a-z0-9-]/g, '');
 };
 
+const getCountryCodeFromLocation = (location: string): string => {
+  const locationLower = location.toLowerCase();
+  
+  const countryCodeMap: Record<string, string> = {
+    'singapore': '🇸🇬', 'sgp': '🇸🇬',
+    'dubai': '🇦🇪', 'uae': '🇦🇪', 'united arab emirates': '🇦🇪',
+    'sri lanka': '🇱🇰', 'srilanka': '🇱🇰', 'sl': '🇱🇰', 'colombo': '🇱🇰',
+    'mumbai': '🇮🇳', 'india': '🇮🇳', 'delhi': '🇮🇳', 'bangalore': '🇮🇳',
+    'kuala lumpur': '🇲🇾', 'malaysia': '🇲🇾',
+    'bangkok': '🇹🇭', 'thailand': '🇹🇭',
+    'hong kong': '🇭🇰', 'hk': '🇭🇰',
+    'beijing': '🇨🇳', 'china': '🇨🇳', 'shanghai': '🇨🇳',
+    'tokyo': '🇯🇵', 'japan': '🇯🇵',
+    'seoul': '🇰🇷', 'korea': '🇰🇷',
+    'riyadh': '🇸🇦', 'saudi arabia': '🇸🇦',
+    'doha': '🇶🇦', 'qatar': '🇶🇦',
+    'kuwait': '🇰🇼', 'muscat': '🇴🇲', 'oman': '🇴🇲',
+    'bahrain': '🇧🇭', 'manama': '🇧🇭',
+    'london': '🇬🇧', 'uk': '🇬🇧', 'united kingdom': '🇬🇧',
+    'paris': '🇫🇷', 'france': '🇫🇷',
+    'berlin': '🇩🇪', 'germany': '🇩🇪',
+    'new york': '🇺🇸', 'usa': '🇺🇸', 'united states': '🇺🇸',
+    'los angeles': '🇺🇸', 'la': '🇺🇸', 'san francisco': '🇺🇸', 'sf': '🇺🇸',
+    'toronto': '🇨🇦', 'canada': '🇨🇦', 'vancouver': '🇨🇦',
+    'sydney': '🇦🇺', 'australia': '🇦🇺', 'melbourne': '🇦🇺',
+    'auckland': '🇳🇿', 'new zealand': '🇳🇿',
+    'johannesburg': '🇿🇦', 'south africa': '🇿🇦',
+    'nairobi': '🇰🇪', 'kenya': '🇰🇪',
+    'lagos': '🇳🇬', 'nigeria': '🇳🇬',
+    'cairo': '🇪🇬', 'egypt': '🇪🇬',
+  };
+  
+  if (countryCodeMap[locationLower]) return countryCodeMap[locationLower];
+  
+  for (const [key, code] of Object.entries(countryCodeMap)) {
+    if (locationLower.includes(key)) return code;
+  }
+  
+  return '🌍';
+};
+
 export const EditionsDropdown = (): JSX.Element => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -67,7 +108,7 @@ export const EditionsDropdown = (): JSX.Element => {
   const dbEditionItems: Edition[] = dbEditions.map((edition) => ({
     name: edition.name,
     path: `/edition/${createEditionSlug(edition.name)}`,
-    flag: "🎯",
+    flag: edition.country_code || getCountryCodeFromLocation(edition.location || edition.name),
     isDbEdition: true,
   }));
 

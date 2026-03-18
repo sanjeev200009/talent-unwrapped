@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   FooterSection,
   GlobalHeader,
@@ -14,6 +15,7 @@ import {
   ReelsSection,
 } from "../features/landing";
 import SEO from "../components/common/SEO";
+import { fetchEditions, fetchSpeakersByEdition, fetchEpisodes, getApiUrl, API_CONFIG, transformDbReelToReel, DbEdition, Speaker } from "../services/api";
 
 /**
  * HomePage
@@ -32,6 +34,87 @@ import SEO from "../components/common/SEO";
  * Note: All sections are full-width (`overflow-x-clip`) to prevent horizontal scroll.
  */
 export const HomePage = (): JSX.Element => {
+  const [dbEditions, setDbEditions] = useState<DbEdition[]>([]);
+  const [dbSpeakersMap, setDbSpeakersMap] = useState<Map<string, Speaker[]>>(new Map());
+  const [dbReelsMap, setDbReelsMap] = useState<any[]>([]);
+  const [dbEpisodeImages, setDbEpisodeImages] = useState<string[]>([]);
+  const [activeFilter, setActiveFilter] = useState("All");
+
+  useEffect(() => {
+    const loadDbData = async () => {
+      const editions = await fetchEditions();
+      setDbEditions(editions);
+
+      const speakersMap = new Map<string, Speaker[]>();
+      for (const edition of editions) {
+        const speakers = await fetchSpeakersByEdition(edition.id);
+        speakersMap.set(edition.name, speakers);
+      }
+      setDbSpeakersMap(speakersMap);
+      
+      // Fetch all DB reels
+      try {
+        const reelsResponse = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.REELS));
+        if (reelsResponse.ok) {
+          const allDbReels = await reelsResponse.json();
+          setDbReelsMap(allDbReels.map(transformDbReelToReel));
+        }
+      } catch (error) {
+        console.error('Error fetching reels:', error);
+      }
+
+      // Fetch all episode images from DB
+      try {
+        const episodesResponse = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.EPISODES));
+        if (episodesResponse.ok) {
+          const allDbEpisodes = await episodesResponse.json();
+          const images: string[] = [];
+          allDbEpisodes.forEach((ep: any) => {
+            // Parse images field only
+            if (ep.images) {
+              if (Array.isArray(ep.images)) {
+                images.push(...ep.images);
+              } else if (typeof ep.images === 'string') {
+                try {
+                  const parsed = JSON.parse(ep.images);
+                  if (Array.isArray(parsed)) {
+                    images.push(...parsed);
+                  }
+                } catch {}
+              }
+            }
+          });
+          setDbEpisodeImages(images);
+        }
+      } catch (error) {
+        console.error('Error fetching episode images:', error);
+      }
+    };
+
+    loadDbData();
+  }, []);
+
+  const handleFilterChange = (filter: string) => {
+    setActiveFilter(filter);
+  };
+
+  const getFilteredSpeakers = (): Speaker[] | undefined => {
+    if (activeFilter === "All") return undefined;
+    
+    const dbEdition = dbEditions.find(e => {
+      // Match by name, slug, or location
+      const nameMatch = e.name.toLowerCase() === activeFilter.toLowerCase();
+      const locationMatch = e.location && e.location.toLowerCase() === activeFilter.toLowerCase();
+      return nameMatch || locationMatch;
+    });
+    if (dbEdition) {
+      return dbSpeakersMap.get(dbEdition.name);
+    }
+    return undefined;
+  };
+
+  const specificSpeakers = getFilteredSpeakers();
+
   const podcastSeriesSchema = {
     "@context": "https://schema.org",
     "@type": "PodcastSeries",
@@ -78,17 +161,22 @@ export const HomePage = (): JSX.Element => {
 
         {/* Full-width speakers section - breaks out of global layout */}
         <div className="w-full overflow-x-clip">
-          <SpeakersProfileSection />
+          <SpeakersProfileSection 
+            onFilterChange={handleFilterChange}
+            activeFilter={activeFilter}
+            dbSpeakersMap={dbSpeakersMap}
+            dbEditions={dbEditions}
+          />
         </div>
 
         {/* Full-width reels section */}
         <div className="w-full overflow-x-clip">
-          <ReelsSection />
+          <ReelsSection dbReels={dbReelsMap} />
         </div>
 
         {/* Full-width episode details section */}
         <div className="w-full overflow-x-clip">
-          <EpisodeDetailsSection />
+          <EpisodeDetailsSection dbEpisodeImages={dbEpisodeImages} />
         </div>
 
         {/* Footer sections - now bypassing global layout */}

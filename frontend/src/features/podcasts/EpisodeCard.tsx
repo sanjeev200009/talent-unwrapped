@@ -72,6 +72,13 @@ export const EpisodeCard = ({
             className="group-hover:scale-110 transition-transform duration-300"
             containerClassName="w-full h-full"
           />
+        ) : episode.images && episode.images.length > 0 ? (
+          <MediaLoader
+            src={episode.images[0]}
+            alt={episode.title}
+            className="group-hover:scale-110 transition-transform duration-300"
+            containerClassName="w-full h-full"
+          />
         ) : (
           episode.videoUrl && (
             episode.videoUrl.includes("youtube") || episode.videoUrl.includes("youtu.be") ? (

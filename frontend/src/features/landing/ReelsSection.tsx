@@ -51,36 +51,47 @@ const getEmbedUrl = (url: string, autoplay: boolean = true, mute: boolean = true
 interface ReelsSectionProps {
   edition?: "Dubai" | "Singapore" | "Sri Lanka";
   episodeId?: string | number;
+  dbReels?: any[];
 }
 
-export const ReelsSection = ({ edition, episodeId }: ReelsSectionProps): JSX.Element => {
+export const ReelsSection = ({ edition, episodeId, dbReels = [] }: ReelsSectionProps): JSX.Element => {
   const sectionRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const slideRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const [dbReels, setDbReels] = useState<ReturnType<typeof transformDbReelToReel>[]>([]);
+  const [episodeDbReels, setEpisodeDbReels] = useState<ReturnType<typeof transformDbReelToReel>[]>([]);
 
   // Fetch reels from DB if episodeId is provided
   useEffect(() => {
     const loadDbReels = async () => {
       if (episodeId) {
         const reels = await fetchReelsByEpisode(String(episodeId));
-        setDbReels(reels.map(transformDbReelToReel));
+        setEpisodeDbReels(reels.map(transformDbReelToReel));
       } else {
-        setDbReels([]);
+        setEpisodeDbReels([]);
       }
     };
     loadDbReels();
   }, [episodeId]);
 
-  // Filter reels: prioritize DB reels for episode, then hardcoded for valid editions
-  // For DB editions without DB reels, show nothing (empty array)
-  const reelVideos = episodeId && dbReels.length > 0
-    ? dbReels
-    : edition && !edition.includes(' ') // Only use hardcoded edition if it's a simple name (Dubai, Singapore, Sri Lanka)
-      ? REELS_DATA.filter((reel) => reel.edition === edition)
-      : []; // For DB editions or invalid editions, show nothing (no fallback to all reels)
+  // Filter reels: prioritize DB reels for episode, then combine DB and hardcoded for homepage
+  let reelVideos: any[];
+  
+  if (episodeId && episodeDbReels.length > 0) {
+    // Episode page with DB reels
+    reelVideos = episodeDbReels;
+  } else if (!edition || edition.includes(' ')) {
+    // Homepage: show all hardcoded + all passed DB reels
+    reelVideos = [...REELS_DATA, ...dbReels];
+  } else if (edition) {
+    // Edition page: show DB reels for that edition + hardcoded for that edition
+    const filteredHardcoded = REELS_DATA.filter((reel) => reel.edition === edition);
+    const filteredDbReels = dbReels.filter((reel) => reel.edition === edition);
+    reelVideos = [...filteredHardcoded, ...filteredDbReels];
+  } else {
+    reelVideos = REELS_DATA;
+  }
 
   // Track active slide using IntersectionObserver (more accurate for mobile)
   useEffect(() => {

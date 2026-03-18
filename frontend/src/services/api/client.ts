@@ -1,5 +1,5 @@
 import { API_CONFIG, getApiUrl } from "./config";
-import type { Episode, EpisodeSpeaker } from "../../types";
+import type { Episode, EpisodeSpeaker, Speaker } from "../../types";
 
 /**
  * DB Edition type from Supabase
@@ -61,8 +61,18 @@ export interface DbSpeaker {
 /**
  * Transform DB Episode to frontend Episode type
  */
-function transformDbEpisodeToEpisode(dbEpisode: DbEpisode): Episode {
-  const editionName = dbEpisode.edition?.name || dbEpisode.edition?.location || 'Unknown';
+function transformDbEpisodeToEpisode(dbEpisode: DbEpisode, editions?: DbEdition[]): Episode {
+  let editionName = 'Unknown';
+  let editionLocation = 'Unknown';
+  
+  if (dbEpisode.edition) {
+    editionName = dbEpisode.edition.name || editionName;
+    editionLocation = dbEpisode.edition.location || editionName;
+  } else if (editions && dbEpisode.edition_id) {
+    const matchedEdition = editions.find(e => e.id === dbEpisode.edition_id);
+    editionName = matchedEdition?.name || matchedEdition?.location || 'Unknown';
+    editionLocation = matchedEdition?.location || editionName;
+  }
   
   const speakers: EpisodeSpeaker[] = (dbEpisode.speakers || []).map((speaker) => ({
     name: speaker.name,
@@ -84,9 +94,7 @@ function transformDbEpisodeToEpisode(dbEpisode: DbEpisode): Episode {
       }
     }
   }
-
-  console.log('DB Episode images:', dbEpisode.images, 'Parsed:', images);
-
+  
   return {
     id: dbEpisode.id,
     title: dbEpisode.title,
@@ -97,6 +105,7 @@ function transformDbEpisodeToEpisode(dbEpisode: DbEpisode): Episode {
     date: dbEpisode.added_date ? formatDate(dbEpisode.added_date) : '',
     speakers,
     edition: editionName,
+    editionLocation: editionLocation,
     featured: false,
     category: 'EPISODE',
     images,
@@ -185,12 +194,15 @@ export async function fetchEpisodesByEdition(editionId: string): Promise<DbEpiso
  */
 export async function fetchEpisodeById(id: string): Promise<Episode | null> {
   try {
-    const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.EPISODE_DETAIL(id)));
+    const [response, editions] = await Promise.all([
+      fetch(getApiUrl(API_CONFIG.ENDPOINTS.EPISODE_DETAIL(id))),
+      fetchEditions()
+    ]);
     if (!response.ok) {
       return null;
     }
     const dbEpisode: DbEpisode = await response.json();
-    return transformDbEpisodeToEpisode(dbEpisode);
+    return transformDbEpisodeToEpisode(dbEpisode, editions);
   } catch (error) {
     console.error('Error fetching episode:', error);
     return null;
@@ -201,8 +213,11 @@ export async function fetchEpisodeById(id: string): Promise<Episode | null> {
  * Fetch all DB episodes transformed to frontend Episode type
  */
 export async function fetchDbEpisodes(): Promise<Episode[]> {
-  const dbEpisodes = await fetchEpisodes();
-  return dbEpisodes.map(transformDbEpisodeToEpisode);
+  const [dbEpisodes, editions] = await Promise.all([
+    fetchEpisodes(),
+    fetchEditions()
+  ]);
+  return dbEpisodes.map(ep => transformDbEpisodeToEpisode(ep, editions));
 }
 
 /**
@@ -220,7 +235,7 @@ export async function fetchDbEpisodesByEdition(editionName: string): Promise<Epi
   }
   
   const dbEpisodes = await fetchEpisodesByEdition(edition.id);
-  return dbEpisodes.map(transformDbEpisodeToEpisode);
+  return dbEpisodes.map(ep => transformDbEpisodeToEpisode(ep, editions));
 }
 
 /**
@@ -353,6 +368,39 @@ export async function fetchScheduleWithTasks(editionId: string): Promise<{ sched
   }
   const tasks = await fetchScheduleTasks(schedule.id);
   return { schedule, tasks };
+}
+
+/**
+ * Transform DB Speaker to frontend Speaker type
+ */
+export function transformDbSpeakerToSpeaker(dbSpeaker: DbSpeaker): Speaker {
+  return {
+    id: parseInt(dbSpeaker.id.replace(/\D/g, '')) || Math.random() * 10000,
+    name: dbSpeaker.name,
+    title: dbSpeaker.role || '',
+    views: dbSpeaker.location || dbSpeaker.country || '',
+    position: dbSpeaker.role || '',
+    image: dbSpeaker.photo_url || '',
+    linkedinUrl: dbSpeaker.linkedin,
+    edition: undefined,
+  };
+}
+
+/**
+ * Fetch speakers by edition ID
+ */
+export async function fetchSpeakersByEdition(editionId: string): Promise<Speaker[]> {
+  try {
+    const response = await fetch(`${getApiUrl(API_CONFIG.ENDPOINTS.SPEAKERS)}?edition_id=${editionId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch speakers: ${response.statusText}`);
+    }
+    const dbSpeakers: DbSpeaker[] = await response.json();
+    return dbSpeakers.map(transformDbSpeakerToSpeaker);
+  } catch (error) {
+    console.error('Error fetching speakers by edition:', error);
+    return [];
+  }
 }
 
 /**

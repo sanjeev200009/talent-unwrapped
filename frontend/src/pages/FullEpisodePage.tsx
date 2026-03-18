@@ -175,17 +175,38 @@ export const FullEpisodePage = (): JSX.Element => {
   }, [isPlaying]);
 
   // Determine edition by checking lists - including DB episodes
-  let detectedEdition = location.state?.edition;
-  if (!detectedEdition && episode) {
-    // First check hardcoded episodes
-    if (getEpisodesByEdition("dubai").some((ep: Episode) => ep.id === episode.id)) detectedEdition = "Dubai";
-    else if (getEpisodesByEdition("singapore").some((ep: Episode) => ep.id === episode.id)) detectedEdition = "Singapore";
-    else if (getEpisodesByEdition("sri-lanka").some((ep: Episode) => ep.id === episode.id)) detectedEdition = "Sri Lanka";
-    // For DB episodes, use the edition from the episode object
-    else if (episode.edition) detectedEdition = episode.edition;
+  // For DB episodes, we prioritize the episode's edition data over navigation state
+  let detectedEdition: string | undefined;
+  let detectedEditionLocation: string | undefined;
+  
+  // If episode has DB edition data, use it instead of navigation state
+  if (episode?.edition && episode.edition !== 'Unknown') {
+    detectedEdition = episode.edition;
+    detectedEditionLocation = (episode as any).editionLocation || episode.edition;
+  } else if (episode) {
+    // For hardcoded episodes, check the lists
+    if (getEpisodesByEdition("dubai").some((ep: Episode) => ep.id === episode.id)) {
+      detectedEdition = "Dubai";
+      detectedEditionLocation = "Dubai";
+    }
+    else if (getEpisodesByEdition("singapore").some((ep: Episode) => ep.id === episode.id)) {
+      detectedEdition = "Singapore";
+      detectedEditionLocation = "Singapore";
+    }
+    else if (getEpisodesByEdition("sri-lanka").some((ep: Episode) => ep.id === episode.id)) {
+      detectedEdition = "Sri Lanka";
+      detectedEditionLocation = "Sri Lanka";
+    }
+    // Fallback to navigation state if nothing matched
+    else if (location.state?.edition) {
+      detectedEdition = location.state.edition;
+      detectedEditionLocation = location.state.edition;
+    }
   }
 
   const edition = detectedEdition || "Dubai";
+  // Use edition location for the badge display
+  const editionLocation = detectedEditionLocation || "Dubai";
 
   // For backward compatibility and specialized content
   const editionKey = edition.toLowerCase() === "sri lanka" || edition.toLowerCase() === "sri-lanka" || edition.toLowerCase() === "colombo" ? "sri-lanka" : edition.toLowerCase() as "dubai" | "singapore" | "sri-lanka";
@@ -379,7 +400,7 @@ export const FullEpisodePage = (): JSX.Element => {
                     letterSpacing: "-0.01em",
                   }}
                 >
-                  {edition} {HERO_CONTENT.EDITION_SUFFIX}
+                  {editionLocation} {HERO_CONTENT.EDITION_SUFFIX}
                 </span>
               </div>
             )}
@@ -534,7 +555,7 @@ export const FullEpisodePage = (): JSX.Element => {
                     letterSpacing: "-0.02em",
                   }}
                 >
-                  {edition} {HERO_CONTENT.EDITION_SUFFIX}
+                  {editionLocation} {HERO_CONTENT.EDITION_SUFFIX}
                 </span>
               </motion.div>
             )}
@@ -599,7 +620,7 @@ export const FullEpisodePage = (): JSX.Element => {
 
         {/* Key Questions Section */}
         <div className="w-full overflow-x-clip">
-          <KeyQuestionsSection edition={editionKey} episodeId={episode?.id} speakers={episode?.speakers} />
+          <KeyQuestionsSection edition={editionKey} episodeId={episode?.id} speakers={episode?.speakers} episodeTitle={episode?.title} episodeDescription={episode?.description} />
         </div>
 
         {/* Reels Section - Show for Dubai/Singapore editions OR any DB episode with reels */}

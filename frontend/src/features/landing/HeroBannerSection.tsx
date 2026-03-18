@@ -9,6 +9,8 @@ import {
   PlayIcon
 } from "@/components/common/Icons";
 import { HERO_CONTENT } from "@/constants/copy";
+import { fetchDbEpisodes } from "@/services/api/client";
+import { Episode } from "@/types";
 
 /**
  * Helper to transform YouTube URLs into embed URLs
@@ -55,7 +57,39 @@ export const HeroBannerSection = (): JSX.Element => {
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  const videoSlides = LANDING_VIDEO_SLIDES;
+  const [videoSlides, setVideoSlides] = useState<any[]>(LANDING_VIDEO_SLIDES);
+
+  useEffect(() => {
+    const loadDbEpisodes = async () => {
+      try {
+        const episodes = await fetchDbEpisodes();
+        if (episodes && episodes.length > 0) {
+          const dbSlides = episodes.map((ep) => ({
+            id: ep.id,
+            thumbnail: ep.image || ep.thumbnailUrl || "",
+            title: ep.title,
+            edition: ep.edition,
+            videoUrl: ep.videoUrl,
+          }));
+          
+          // Combine and filter out duplicates if needed, but here we just append
+          // Ensuring unique slides by ID
+          const combined = [...LANDING_VIDEO_SLIDES];
+          dbSlides.forEach(dbSlide => {
+            if (!combined.some(s => s.id === dbSlide.id)) {
+              combined.push(dbSlide);
+            }
+          });
+          
+          setVideoSlides(combined);
+        }
+      } catch (error) {
+        console.error("Failed to load DB episodes for Hero:", error);
+      }
+    };
+    
+    loadDbEpisodes();
+  }, []);
 
   useEffect(() => {
     if (!isPlaying) {

@@ -16,9 +16,11 @@ interface KeyQuestionsSectionProps {
   edition?: "dubai" | "singapore" | "sri-lanka";
   episodeId?: string | number;
   speakers?: EpisodeSpeaker[];
+  episodeTitle?: string;
+  episodeDescription?: string;
 }
 
-export const KeyQuestionsSection = ({ edition = "dubai", episodeId, speakers }: KeyQuestionsSectionProps): JSX.Element => {
+export const KeyQuestionsSection = ({ edition = "dubai", episodeId, speakers, episodeTitle, episodeDescription }: KeyQuestionsSectionProps): JSX.Element => {
   const [currentPage] = useState(0);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState<{
     [key: number]: number;
@@ -113,6 +115,9 @@ export const KeyQuestionsSection = ({ edition = "dubai", episodeId, speakers }: 
 
   const hasCustomContent = hasDbQuestions || (episodeId && ["3", "4", "5", "6", "7", "8"].includes(String(episodeId)));
 
+  // Check if this is a DB episode with custom title/description
+  const hasDbEpisodeContent = episodeTitle && episodeDescription;
+
   // Minimum swipe distance (in px)
   const minSwipeDistance = 50;
 
@@ -172,12 +177,26 @@ export const KeyQuestionsSection = ({ edition = "dubai", episodeId, speakers }: 
           {/* Session Title with Border */}
           <div className="flex items-center gap-4 pb-4 mb-6 border-b border-neutral-200">
             <h3 className="flex-1 [font-family:'Geist',Helvetica] font-medium text-xl sm:text-2xl md:text-[29px] tracking-[-0.8px] lg:tracking-[-1.16px] leading-tight">
-              <span className="text-[#7bb302]">
-                {currentSession.sessionTitle}
-              </span>
-              <span className="text-[#ed2939]">
-                {currentSession.sessionSubtitle}
-              </span>
+              {hasDbEpisodeContent ? (
+                <>
+                  <span className="text-[#7bb302]">
+                    {episodeTitle}:
+                  </span>
+                  <span className="text-[#ed2939]"> </span>
+                  <span className="text-[#ed2939]">
+                    {episodeDescription}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-[#7bb302]">
+                    {currentSession.sessionTitle}
+                  </span>
+                  <span className="text-[#ed2939]">
+                    {currentSession.sessionSubtitle}
+                  </span>
+                </>
+              )}
             </h3>
             <button
               type="button"

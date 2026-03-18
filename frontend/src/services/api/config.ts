@@ -34,6 +34,7 @@ export const API_CONFIG = {
     REELS: "/api/reels",
     SCHEDULES: "/api/schedules",
     SCHEDULE_TASKS: "/api/schedule-tasks",
+    SPEAKERS: "/api/speakers",
   },
 
   // Headers

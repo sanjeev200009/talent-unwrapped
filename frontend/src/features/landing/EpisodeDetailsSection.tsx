@@ -17,9 +17,10 @@ interface ImageItem {
 
 interface EpisodeDetailsSectionProps {
   episodeImages?: string[];
+  dbEpisodeImages?: string[];
 }
 
-export const EpisodeDetailsSection = ({ episodeImages }: EpisodeDetailsSectionProps): JSX.Element => {
+export const EpisodeDetailsSection = ({ episodeImages, dbEpisodeImages }: EpisodeDetailsSectionProps): JSX.Element => {
   const episodeTypes: EpisodeType[] = [
     { id: 1, title: GUEST_SECTION_CONTENT.FIRESIDE_CHATS, isActive: true },
     { id: 2, title: GUEST_SECTION_CONTENT.ONE_ON_ONE, isActive: false },
@@ -27,7 +28,7 @@ export const EpisodeDetailsSection = ({ episodeImages }: EpisodeDetailsSectionPr
     { id: 4, title: GUEST_SECTION_CONTENT.ROUNDTABLE, isActive: false },
   ];
 
-  const defaultImages: ImageItem[] = [
+  const hardcodedImages: ImageItem[] = [
     {
       id: 1,
       src: "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770791419/Frame_1000003798_chw5ji.png",
@@ -55,18 +56,39 @@ export const EpisodeDetailsSection = ({ episodeImages }: EpisodeDetailsSectionPr
     },
   ];
 
-  const images: ImageItem[] = episodeImages && episodeImages.length > 0
-    ? episodeImages.map((src, index) => ({
-        id: index + 1,
+  const dbHomepageImages: ImageItem[] = dbEpisodeImages && dbEpisodeImages.length > 0
+    ? dbEpisodeImages.map((src, index) => ({
+        id: 100 + index,
         src,
         alt: `Episode image ${index + 1}`,
       }))
-    : defaultImages;
+    : [];
+
+  const allImages: ImageItem[] = [...dbHomepageImages, ...hardcodedImages];
 
   const [activeEpisode, setActiveEpisode] = useState<number>(1);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
+  const [displayImages, setDisplayImages] = useState<ImageItem[]>(allImages);
   const sectionRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Update display images when episode type or episodeImages changes
+  useEffect(() => {
+    if (episodeImages && episodeImages.length > 0) {
+      // Show only episode-specific images
+      const episodeSpecificImages: ImageItem[] = episodeImages.map((src, index) => ({
+        id: 1000 + index,
+        src,
+        alt: `Episode image ${index + 1}`,
+      }));
+      setDisplayImages(episodeSpecificImages);
+      setActiveImageIndex(0);
+    } else {
+      // Show all images (homepage)
+      setDisplayImages(allImages);
+      setActiveImageIndex(0);
+    }
+  }, [episodeImages, activeEpisode]);
 
   const handleEpisodeClick = (id: number) => {
     setActiveEpisode(id);
@@ -81,13 +103,28 @@ export const EpisodeDetailsSection = ({ episodeImages }: EpisodeDetailsSectionPr
 
   // Calculate position and scale for each image based on active index
   const getImageStyle = (index: number) => {
-    const totalImages = images.length;
-    const diff = (index - activeImageIndex + totalImages) % totalImages;
+    const totalImages = displayImages.length;
+    if (totalImages === 0) return { transform: '', zIndex: 0, opacity: 0, left: '50%', top: '50%', filter: 'none' };
+    
+    // Dynamic visible count: show as many as available, up to 7, with center being clear
+    // Ensure odd number so there's a clear center
+    let visibleCount = Math.min(totalImages, 7);
+    if (visibleCount % 2 === 0) visibleCount = Math.max(visibleCount - 1, 3); // Ensure odd
+    const halfVisible = Math.floor(visibleCount / 2); // How many on each side of center
+    
+    // Calculate relative position from center
+    let diff = index - activeImageIndex;
+    
+    // Handle wrapping for infinite scroll effect
+    if (diff > halfVisible) diff -= totalImages;
+    if (diff < -halfVisible) diff += totalImages;
 
-    // Use smaller offset for mobile, larger for desktop
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+    // Use responsive offsets
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
     const isTablet = typeof window !== 'undefined' && window.innerWidth >= 768 && window.innerWidth < 1024;
-    const baseOffset = isMobile ? (isTablet ? 100 : 70) : 140;
+    const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
+    
+    const baseOffset = isMobile ? 60 : isTablet ? 80 : 100;
 
     // Main image (active) - center, largest, highest z-index
     if (diff === 0) {
@@ -101,28 +138,43 @@ export const EpisodeDetailsSection = ({ episodeImages }: EpisodeDetailsSectionPr
       };
     }
 
-    // Images to neighbors
-    if (diff <= Math.floor(totalImages / 2)) {
+    // Images to the right (diff 1-3)
+    if (diff > 0 && diff <= halfVisible) {
       const offset = diff * baseOffset;
-      const scale = 1 - (diff * 0.15);
+      const scale = 1 - (diff * 0.08);
+      const blur = diff * 2;
       return {
         transform: `translate(-50%, -50%) scale(${scale})`,
         zIndex: 50 - diff,
-        opacity: 0.8,
+        opacity: 1 - (diff * 0.2),
         left: `calc(50% + ${offset}px)`,
         top: '50%',
-        filter: 'none',
+        filter: `blur(${blur}px)`,
       };
     }
 
-    const leftDiff = totalImages - diff;
-    const offset = leftDiff * baseOffset;
-    const scale = 1 - (leftDiff * 0.15);
+    // Images to the left (diff -1 to -3)
+    if (diff < 0 && diff >= -halfVisible) {
+      const absDiff = Math.abs(diff);
+      const offset = absDiff * baseOffset;
+      const scale = 1 - (absDiff * 0.08);
+      const blur = absDiff * 2;
+      return {
+        transform: `translate(-50%, -50%) scale(${scale})`,
+        zIndex: 50 - absDiff,
+        opacity: 1 - (absDiff * 0.2),
+        left: `calc(50% - ${offset}px)`,
+        top: '50%',
+        filter: `blur(${blur}px)`,
+      };
+    }
+
+    // Images outside the 7 visible - hide them
     return {
-      transform: `translate(-50%, -50%) scale(${scale})`,
-      zIndex: 50 - leftDiff,
-      opacity: 0.8,
-      left: `calc(50% - ${offset}px)`,
+      transform: `translate(-50%, -50%) scale(0.5)`,
+      zIndex: 0,
+      opacity: 0,
+      left: '50%',
       top: '50%',
       filter: 'none',
     };
@@ -137,9 +189,9 @@ export const EpisodeDetailsSection = ({ episodeImages }: EpisodeDetailsSectionPr
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            // Start the loop
+            // Start the loop - change by 1 slide at a time
             intervalRef.current = setInterval(() => {
-              setActiveImageIndex((prev) => (prev + 1) % images.length);
+              setActiveImageIndex((prev) => (prev + 1) % displayImages.length);
             }, 3000); // Change image every 3 seconds
           } else {
             // Stop the loop
@@ -163,7 +215,7 @@ export const EpisodeDetailsSection = ({ episodeImages }: EpisodeDetailsSectionPr
         clearInterval(intervalRef.current);
       }
     };
-  }, [images.length]);
+  }, [displayImages.length]);
 
   return (
     <>
@@ -212,7 +264,7 @@ export const EpisodeDetailsSection = ({ episodeImages }: EpisodeDetailsSectionPr
             transition={{ duration: 0.8, delay: 0.2 }}
             className="relative w-full max-w-[160px] h-[200px] sm:max-w-[320px] sm:h-[280px] md:max-w-[400px] md:h-[350px] mx-auto mb-6 px-4 sm:px-0 lg:max-w-none lg:w-[560px] lg:h-[320px] lg:mx-0 lg:mb-0 lg:px-0 lg:absolute lg:top-[240px] lg:right-[100px] pointer-events-none flex items-center justify-center"
           >
-            {images.map((image, index) => {
+            {displayImages.map((image, index) => {
               const style = getImageStyle(index);
               const isActive = (index === activeImageIndex);
               return (

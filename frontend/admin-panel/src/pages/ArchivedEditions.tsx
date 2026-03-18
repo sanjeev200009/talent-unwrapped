@@ -44,6 +44,15 @@ const ArchivedEditions: React.FC = () => {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    try {
+      await editionsAPI.delete(id);
+      loadEditions();
+    } catch (err) {
+      console.error('Failed to delete edition:', err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -72,6 +81,7 @@ const ArchivedEditions: React.FC = () => {
               key={edition.id}
               {...edition}
               onRestore={handleRestore}
+              onDelete={handleDelete}
             />
           ))}
         </div>

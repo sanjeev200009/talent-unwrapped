@@ -60,6 +60,15 @@ const EditEdition: React.FC = () => {
     }
   };
 
+  const handleDelete = async (deleteId: string) => {
+    try {
+      await editionsAPI.delete(deleteId);
+      loadEditions();
+    } catch (err) {
+      console.error('Failed to delete edition:', err);
+    }
+  };
+
   useEffect(() => {
     if (id) {
       console.log(`Editing edition ID: ${id}`);
@@ -116,6 +125,7 @@ const EditEdition: React.FC = () => {
               {...edition}
               onArchive={handleArchive}
               onRestore={handleRestore}
+              onDelete={handleDelete}
             />
           ))}
         </div>

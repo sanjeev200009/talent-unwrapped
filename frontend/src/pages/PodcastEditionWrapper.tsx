@@ -126,6 +126,22 @@ export const PodcastEditionWrapper = (): JSX.Element | null => {
     return null;
   }
 
+  // Parse edition images from dbEdition
+  const getEditionImages = () => {
+    if (!dbEdition?.image_url) return [];
+    try {
+      const parsed = JSON.parse(dbEdition.image_url);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return dbEdition.image_url ? [dbEdition.image_url] : [];
+    }
+  };
+
+  const editionImages = isHardcoded ? [] : getEditionImages();
+  const editionName = isHardcoded ? null : dbEdition?.name;
+  const editionLocation = isHardcoded ? null : dbEdition?.location;
+  const editionDescription = isHardcoded ? null : (dbEdition?.internal_notes || null);
+
   return (
     <PodcastEditionPage
       edition={validEdition}
@@ -133,6 +149,10 @@ export const PodcastEditionWrapper = (): JSX.Element | null => {
       onViewEpisode={handleViewEpisode}
       schedule={isHardcoded ? null : dbSchedule}
       scheduleTasks={isHardcoded ? [] : dbScheduleTasks}
+      editionImages={editionImages}
+      dbEditionName={editionName || undefined}
+      dbEditionLocation={editionLocation || undefined}
+      dbEditionDescription={editionDescription || undefined}
     />
   );
 };

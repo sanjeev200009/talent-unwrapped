@@ -7,7 +7,8 @@ import { getEditionContent } from "../../data";
 import { ASSETS } from "@/constants/assets";
 import { ArrowRightIcon, VideoCircleFilledIcon, ExportIcon } from "@/components/common/Icons";
 import { SECTION_TITLES, SECTION_DESCRIPTIONS, BUTTONS, TALENT_INTRO_CONTENT } from "@/constants/copy";
-import { fetchEditions, fetchScheduleWithTasks, fetchDbEpisodesByEdition, DbEdition, DbScheduleTask, Episode } from "../../services/api/client";
+import { fetchEditions, fetchScheduleWithTasks, fetchDbEpisodesByEdition, DbEdition, DbScheduleTask } from "../../services/api/client";
+import { Episode } from "../../types";
 
 const createEditionSlug = (name: string): string => {
   return name
@@ -44,6 +45,54 @@ export const TalentIntroductionSection = (): JSX.Element => {
   const [dbEpisodes, setDbEpisodes] = useState<Episode[]>([]);
 
   const [isMobile, setIsMobile] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const autoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auto-scroll cards - show each card for 10 seconds
+  useEffect(() => {
+    if (isMobile || !scrollContainerRef.current) {
+      if (autoScrollRef.current) {
+        clearInterval(autoScrollRef.current);
+        autoScrollRef.current = null;
+      }
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    
+    // Start auto-scroll interval
+    autoScrollRef.current = setInterval(() => {
+      if (container) {
+        const scrollWidth = container.scrollWidth;
+        const clientWidth = container.clientWidth;
+        const currentScroll = container.scrollLeft;
+        const maxScroll = scrollWidth - clientWidth;
+        
+        // Calculate next scroll position
+        let nextScroll = currentScroll + clientWidth;
+        if (nextScroll > maxScroll) {
+          nextScroll = 0; // Loop back to start
+        }
+        
+        container.scrollTo({
+          left: nextScroll,
+          behavior: 'smooth'
+        });
+      }
+    }, 10000); // 10 seconds per card
+
+    // Initial scroll to start
+    if (container) {
+      container.scrollLeft = 0;
+    }
+
+    return () => {
+      if (autoScrollRef.current) {
+        clearInterval(autoScrollRef.current);
+        autoScrollRef.current = null;
+      }
+    };
+  }, [selectedEdition, dbScheduleTasks, dbEpisodes, isMobile]);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -123,7 +172,7 @@ export const TalentIntroductionSection = (): JSX.Element => {
       videoIcon: "videoCircle",
       exportIcon: "export",
     }));
-    const episodesChapters = dbEpisodes.map((ep, idx) => ({
+    const episodesChapters = dbEpisodes.map((ep) => ({
       id: `episode-${ep.id}`,
       title: ep.title,
       subtitle: ep.description?.substring(0, 100) || "",
@@ -131,63 +180,91 @@ export const TalentIntroductionSection = (): JSX.Element => {
       exportIcon: "export",
     }));
     const allChapters = [...scheduleTasksChapters, ...episodesChapters];
+    const dbDescription = selectedDbEdition.internal_notes && selectedDbEdition.internal_notes.trim() !== ''
+      ? selectedDbEdition.internal_notes
+      : SECTION_DESCRIPTIONS.CHAPTER_EXPLORATION;
+
+    let dbEditionImages: string[] = [];
+    if (selectedDbEdition.image_url) {
+      try {
+        if (typeof selectedDbEdition.image_url === 'string') {
+          dbEditionImages = JSON.parse(selectedDbEdition.image_url);
+        } else if (Array.isArray(selectedDbEdition.image_url)) {
+          dbEditionImages = selectedDbEdition.image_url;
+        }
+      } catch {
+        dbEditionImages = [];
+      }
+    }
+
     editionData = {
-      name: selectedDbEdition.name,
+      name: selectedDbEdition.location,
+      description: dbDescription,
       schedule: {
         date: new Date(selectedDbEdition.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         dateTime: selectedDbEdition.date,
       },
       chapters: allChapters,
+      images: dbEditionImages,
     };
   } else {
     editionData = getEditionContent(selectedEdition as any);
   }
-  const { name: editionName, schedule, chapters } = editionData;
+  const { name: editionName, description: editionDescription, schedule, chapters, images: editionImages } = editionData as any;
 
-  const decorativeImages = [
-    {
-      id: 1,
-      src: selectedEdition === "singapore"
-        ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770709852/Unwrapped_thumbnail_-_Ella_2_r6uwdx.png"
-        : selectedEdition === "sri-lanka"
-          ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1771218003/1764928872339_j91re3.jpg"
-          : ASSETS.manInHeadphones,
-      alt: selectedEdition === "singapore" ? "Ella Sherman" : selectedEdition === "sri-lanka" ? "Sumudu Thanthirigoda" : "Man in headphones",
-      containerClass: `absolute ${isMobile ? "top-[260px] left-[10px]" : "top-[150px] lg:top-[150px] left-[5%] lg:left-[871px]"} w-[100px] h-[75px] lg:w-[152px] lg:h-[114px] z-0 lg:flex rounded-xl overflow-hidden shadow-[12px_12px_30px_#00000017] opacity-80 lg:opacity-100`,
-      baseRotate: -7.30,
-      objectPosition: (selectedEdition === "singapore" || selectedEdition === "sri-lanka") ? "center center" : undefined,
-      imageScale: selectedEdition === "singapore" ? (isMobile ? 1.05 : 1.1) : selectedEdition === "sri-lanka" ? (isMobile ? 1.05 : 1.1) : (isMobile ? 1.8 : 2.2),
-      imageTranslateX: (selectedEdition === "singapore" || selectedEdition === "sri-lanka") ? "0px" : (isMobile ? "20px" : "40px"),
-      imageTranslateY: (selectedEdition === "singapore") ? "0px" : selectedEdition === "sri-lanka" ? (isMobile ? "10px" : "15px") : (isMobile ? "10px" : "25px"),
-      animY: isMobile ? [0, -8, 0] : [0, -10, 0],
-    },
-    {
-      id: 2,
-      src: selectedEdition === "singapore"
-        ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770709853/Unwrapped_thumbnail_-_Echo_1_g0i2ae.png"
-        : selectedEdition === "sri-lanka"
-          ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770883420/Frame_4449057_1_1_npu1wb.png"
-          : ASSETS.youngBlackMan,
-      alt: selectedEdition === "singapore" ? "Echo Wu" : selectedEdition === "sri-lanka" ? "Ayin Shah Jahan" : "Young black man in headphones",
-      containerClass: `absolute ${isMobile ? "top-[120px] right-[40px]" : "top-52 lg:top-52 right-[5%] sm:left-[230px] lg:left-[1125px] lg:right-auto"} w-[110px] h-[83px] lg:w-[152px] lg:h-[114px] z-0 lg:flex rounded-xl overflow-hidden shadow-[12px_12px_30px_#00000017] opacity-80 lg:opacity-100`,
-      baseRotate: 6.49,
-      objectPosition: (selectedEdition === "singapore" || selectedEdition === "sri-lanka") ? "center center" : undefined,
-      imageScale: selectedEdition === "singapore" ? (isMobile ? 1.05 : 1.1) : selectedEdition === "sri-lanka" ? (isMobile ? 1.05 : 1.1) : (isMobile ? 1.8 : 2.2),
-      imageTranslateX: (selectedEdition === "singapore" || selectedEdition === "sri-lanka") ? "0px" : (isMobile ? "20px" : "40px"),
-      imageTranslateY: (selectedEdition === "singapore") ? "0px" : selectedEdition === "sri-lanka" ? (isMobile ? "10px" : "15px") : (isMobile ? "10px" : "25px"),
-      animY: isMobile ? [0, -8, 0] : [0, -10, 0],
-    },
-  ];
-
-  const getFloatingAnimation = (baseRotate: number) => ({
-    y: [0, -10, 0],
-    rotate: [baseRotate, baseRotate + 2, baseRotate],
-    transition: {
-      duration: 6,
-      repeat: Infinity,
-      ease: "easeInOut"
+  const decorativeImages = (() => {
+    if (isDbEdition && editionImages && editionImages.length > 0) {
+      return editionImages.slice(0, 2).map((img: string, idx: number) => ({
+        id: idx + 1,
+        src: img,
+        alt: `Edition image ${idx + 1}`,
+        containerClass: idx === 0
+          ? `absolute ${isMobile ? "top-[260px] left-[10px]" : "top-[150px] lg:top-[150px] left-[5%] lg:left-[871px]"} w-[100px] h-[75px] lg:w-[152px] lg:h-[114px] z-0 lg:flex rounded-xl overflow-hidden shadow-[12px_12px_30px_#00000017] opacity-80 lg:opacity-100`
+          : `absolute ${isMobile ? "top-[120px] right-[40px]" : "top-52 lg:top-52 right-[5%] sm:left-[230px] lg:left-[1125px] lg:right-auto"} w-[110px] h-[83px] lg:w-[152px] lg:h-[114px] z-0 lg:flex rounded-xl overflow-hidden shadow-[12px_12px_30px_#00000017] opacity-80 lg:opacity-100`,
+        baseRotate: idx === 0 ? -7.30 : 6.49,
+        objectPosition: "center center",
+        imageScale: isMobile ? 1.05 : 1.1,
+        imageTranslateX: "0px",
+        imageTranslateY: isMobile ? "10px" : "15px",
+        animY: isMobile ? [0, -8, 0] : [0, -10, 0],
+      }));
     }
-  });
+
+    return [
+      {
+        id: 1,
+        src: selectedEdition === "singapore"
+          ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770709852/Unwrapped_thumbnail_-_Ella_2_r6uwdx.png"
+          : selectedEdition === "sri-lanka"
+            ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1771218003/1764928872339_j91re3.jpg"
+            : ASSETS.manInHeadphones,
+        alt: selectedEdition === "singapore" ? "Ella Sherman" : selectedEdition === "sri-lanka" ? "Sumudu Thanthirigoda" : "Man in headphones",
+        containerClass: `absolute ${isMobile ? "top-[260px] left-[10px]" : "top-[150px] lg:top-[150px] left-[5%] lg:left-[871px]"} w-[100px] h-[75px] lg:w-[152px] lg:h-[114px] z-0 lg:flex rounded-xl overflow-hidden shadow-[12px_12px_30px_#00000017] opacity-80 lg:opacity-100`,
+        baseRotate: -7.30,
+        objectPosition: (selectedEdition === "singapore" || selectedEdition === "sri-lanka") ? "center center" : undefined,
+        imageScale: selectedEdition === "singapore" ? (isMobile ? 1.05 : 1.1) : selectedEdition === "sri-lanka" ? (isMobile ? 1.05 : 1.1) : (isMobile ? 1.8 : 2.2),
+        imageTranslateX: (selectedEdition === "singapore" || selectedEdition === "sri-lanka") ? "0px" : (isMobile ? "20px" : "40px"),
+        imageTranslateY: (selectedEdition === "singapore") ? "0px" : selectedEdition === "sri-lanka" ? (isMobile ? "10px" : "15px") : (isMobile ? "10px" : "25px"),
+        animY: isMobile ? [0, -8, 0] : [0, -10, 0],
+      },
+      {
+        id: 2,
+        src: selectedEdition === "singapore"
+          ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770709853/Unwrapped_thumbnail_-_Echo_1_g0i2ae.png"
+          : selectedEdition === "sri-lanka"
+            ? "https://res.cloudinary.com/dvhxc6y0z/image/upload/v1770883420/Frame_4449057_1_1_npu1wb.png"
+            : ASSETS.youngBlackMan,
+        alt: selectedEdition === "singapore" ? "Echo Wu" : selectedEdition === "sri-lanka" ? "Ayin Shah Jahan" : "Young black man in headphones",
+        containerClass: `absolute ${isMobile ? "top-[120px] right-[40px]" : "top-52 lg:top-52 right-[5%] sm:left-[230px] lg:left-[1125px] lg:right-auto"} w-[110px] h-[83px] lg:w-[152px] lg:h-[114px] z-0 lg:flex rounded-xl overflow-hidden shadow-[12px_12px_30px_#00000017] opacity-80 lg:opacity-100`,
+        baseRotate: 6.49,
+        objectPosition: (selectedEdition === "singapore" || selectedEdition === "sri-lanka") ? "center center" : undefined,
+        imageScale: selectedEdition === "singapore" ? (isMobile ? 1.05 : 1.1) : selectedEdition === "sri-lanka" ? (isMobile ? 1.05 : 1.1) : (isMobile ? 1.8 : 2.2),
+        imageTranslateX: (selectedEdition === "singapore" || selectedEdition === "sri-lanka") ? "0px" : (isMobile ? "20px" : "40px"),
+        imageTranslateY: (selectedEdition === "singapore") ? "0px" : selectedEdition === "sri-lanka" ? (isMobile ? "10px" : "15px") : (isMobile ? "10px" : "25px"),
+        animY: isMobile ? [0, -8, 0] : [0, -10, 0],
+      },
+    ];
+  })();
 
   const getCounterRotation = (baseRotate: number) => ({
     rotate: [(-baseRotate - 4), (-(baseRotate + 2) - 4), (-baseRotate - 4)],
@@ -279,7 +356,7 @@ export const TalentIntroductionSection = (): JSX.Element => {
               </span>
 
               <span className="text-[#8d8d8d] tracking-[-0.77px]">
-                {SECTION_DESCRIPTIONS.CHAPTER_EXPLORATION}
+                {editionDescription}
               </span>
             </motion.p>
 
@@ -322,12 +399,12 @@ export const TalentIntroductionSection = (): JSX.Element => {
           </p>
         </motion.div>
 
-        <div className="flex flex-col lg:flex-row items-center justify-center gap-4 xl:gap-8 relative lg:absolute top-auto lg:top-[589px] left-0 lg:left-1/2 lg:-translate-x-1/2 w-full max-w-full scrollbar-hide pl-4 sm:pl-6 md:pl-8 lg:pl-0">
+        <div className="flex flex-col lg:flex-row items-center gap-4 xl:gap-8 relative lg:absolute top-auto lg:top-[589px] left-0 lg:left-1/2 lg:-translate-x-1/2 w-full max-w-full scrollbar-hide pl-4 sm:pl-6 md:pl-8 lg:pl-0">
           {/* Mobile Carousel - Only visible on mobile */}
           <div className="lg:hidden w-full mb-8">
             <MobileCarouselSection
-              podcastCards={chapters.map(c => ({
-                id: Number(c.id),
+              podcastCards={chapters.map((c: { id: string | number; title: string; subtitle?: string }, idx: number) => ({
+                id: idx,
                 title: c.title,
                 subtitle: c.subtitle || ""
               }))}
@@ -336,17 +413,18 @@ export const TalentIntroductionSection = (): JSX.Element => {
           </div>
 
           {/* Desktop Cards - Only visible on lg+ */}
-          <div className="hidden lg:flex gap-4 xl:gap-8 w-full lg:w-[95%] xl:w-auto justify-center">
-            {chapters.map((chapter, index) => (
-              <motion.article
-                key={chapter.id}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: 0.2 + (index * 0.1) }}
-                whileHover={{ y: -10, boxShadow: "0px 20px 40px rgba(0,0,0,0.1)" }}
-                className="relative w-full max-w-[360px] lg:flex-1 lg:max-w-[380px] xl:w-[380px] h-[260px] lg:h-[280px] bg-[#f8f8f8] rounded-[20px] lg:rounded-[24px] transition-colors duration-300 hover:bg-white cursor-pointer overflow-hidden"
-              >
+          <div ref={scrollContainerRef} className="hidden lg:block w-full overflow-x-auto scrollbar-hide">
+            <div className="flex gap-4 xl:gap-8 justify-start">
+              {chapters.map((chapter: { id: string | number; title: string; subtitle?: string }, index: number) => (
+                <motion.article
+                  key={chapter.id}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: 0.2 + (index * 0.1) }}
+                  whileHover={{ y: -10, boxShadow: "0px 20px 40px rgba(0,0,0,0.1)" }}
+                  className="relative flex-shrink-0 w-[380px] h-[280px] bg-[#f8f8f8] rounded-[24px] transition-colors duration-300 hover:bg-white cursor-pointer overflow-hidden scroll-card"
+                >
                 <div
                   className="inline-flex items-center gap-2 lg:gap-2.5 p-2 lg:p-3 absolute top-4 lg:top-6 left-4 lg:left-6 bg-[#7bb302] rounded-[40px]"
                   aria-label="Video content"
@@ -388,10 +466,11 @@ export const TalentIntroductionSection = (): JSX.Element => {
                 </a>
               </motion.article>
             ))}
+            </div>
           </div>
         </div>
 
-        {decorativeImages.map((image) => (
+        {decorativeImages.map((image: { id: number; src: string; alt: string; containerClass: string; baseRotate: number; animY?: number[]; objectPosition?: string; imageScale?: number | string; imageTranslateX?: string; imageTranslateY?: string }) => (
           <motion.div
             key={image.id}
             className={`${image.containerClass} will-change-transform shadow-[12px_12px_30px_#00000017]`}

@@ -59,6 +59,15 @@ const Dashboard = () => {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    try {
+      await editionsAPI.delete(id);
+      loadEditions();
+    } catch (err) {
+      console.error('Failed to delete edition:', err);
+    }
+  };
+
   const activeEditions = editions.filter(edition => edition.status !== 'archived');
   const liveCount = editions.filter(edition => edition.status === 'live').length;
   const draftCount = editions.filter(edition => edition.status === 'draft').length;
@@ -143,6 +152,7 @@ const Dashboard = () => {
               {...edition}
               onArchive={handleArchive}
               onRestore={handleRestore}
+              onDelete={handleDelete}
             />
           ))}
         </div>

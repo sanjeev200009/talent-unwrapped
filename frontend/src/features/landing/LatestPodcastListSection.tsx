@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { LATEST_PODCASTS } from "@/data/episodes";
 import { BackArrowIcon, NextArrowIcon, PlayIcon } from "@/components/common/Icons";
 import { EDITION_NAMES } from "@/constants/copy";
-import { fetchEditions, fetchEpisodesByEdition, fetchDbEpisodesByEdition, DbEdition, Episode } from "@/services/api/client";
+import { fetchEditions, fetchEpisodesByEdition, fetchDbEpisodesByEdition, fetchDbEpisodes, DbEdition, Episode } from "@/services/api/client";
 import type { Podcast } from "@/types";
 
 export const LatestPodcastListSection = (): JSX.Element => {
@@ -32,27 +32,43 @@ export const LatestPodcastListSection = (): JSX.Element => {
       setIsLoadingEpisodes(true);
       try {
         if (activeFilter === "All") {
-          const allDbEpisodes = await fetchDbEpisodesByEdition('');
+          const allDbEpisodes = await fetchDbEpisodes();
           setDbEpisodes(allDbEpisodes);
         } else {
+          // Find DB edition by location or name
           const dbEdition = dbEditions.find(e => 
-            createEditionSlug(e.name) === activeFilter || 
-            e.name === activeFilter ||
-            e.name.toLowerCase() === activeFilter.toLowerCase()
+            (e.location || e.name) === activeFilter
           );
           if (dbEdition) {
             const dbEpisodesRaw = await fetchEpisodesByEdition(dbEdition.id);
-            const episodes = dbEpisodesRaw.map(ep => ({
-              id: ep.id,
-              title: ep.title || '',
-              description: ep.description || '',
-              image: ep.thumbnail_url || '',
-              videoUrl: ep.youtube_url || '',
-              duration: ep.duration || '',
-              date: ep.added_date || '',
-              edition: dbEdition.name,
-              images: Array.isArray(ep.images) ? ep.images : [],
-            }));
+            const episodes = dbEpisodesRaw.map((ep: any) => {
+              // Parse images field (might be JSON string or array)
+              let images: string[] = [];
+              if (ep.images) {
+                if (Array.isArray(ep.images)) {
+                  images = ep.images;
+                } else if (typeof ep.images === 'string') {
+                  try {
+                    images = JSON.parse(ep.images);
+                  } catch {
+                    images = [];
+                  }
+                }
+              }
+              // Try multiple possible thumbnail field names
+              const thumbnail = ep.thumbnail_url || ep.thumbnailUrl || ep.thumbnail || images[0] || '';
+              return {
+                id: ep.id,
+                title: ep.title || '',
+                description: ep.description || '',
+                image: thumbnail,
+                videoUrl: ep.youtube_url || ep.videoUrl || '',
+                duration: ep.duration || '',
+                date: ep.added_date || '',
+                edition: dbEdition.location || dbEdition.name,
+                images,
+              };
+            });
             setDbEpisodes(episodes);
           } else {
             setDbEpisodes([]);
@@ -74,15 +90,34 @@ export const LatestPodcastListSection = (): JSX.Element => {
   };
 
   const getPodcastThumbnail = (podcast: Podcast | Episode): string => {
-    if ('thumbnailUrl' in podcast && podcast.thumbnailUrl) {
-      return podcast.thumbnailUrl;
-    }
-    if ('image' in podcast && podcast.image) {
+    // First priority: explicit image field
+    if ('image' in podcast && typeof podcast.image === 'string' && podcast.image.trim() !== '') {
       return podcast.image;
     }
-    // Check for images array (DB episodes)
+    // Second priority: thumbnailUrl (hardcoded format)
+    if ('thumbnailUrl' in podcast && typeof podcast.thumbnailUrl === 'string' && podcast.thumbnailUrl.trim() !== '') {
+      return podcast.thumbnailUrl;
+    }
+    // Third priority: images array
     if ('images' in podcast && Array.isArray(podcast.images) && podcast.images.length > 0) {
-      return podcast.images[0];
+      const firstImage = podcast.images[0];
+      if (typeof firstImage === 'string' && firstImage.trim() !== '') {
+        return firstImage;
+      }
+    }
+    // Fourth priority: YouTube thumbnail from videoUrl
+    if ('videoUrl' in podcast && podcast.videoUrl) {
+      const url = String(podcast.videoUrl);
+      try {
+        if (url.includes("youtu.be")) {
+          const videoId = url.split("youtu.be/")[1]?.split("?")[0];
+          if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+        } else if (url.includes("youtube.com/watch")) {
+          const urlObj = new URL(url);
+          const videoId = urlObj.searchParams.get("v");
+          if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+        }
+      } catch {}
     }
     return '';
   };
@@ -95,7 +130,58 @@ export const LatestPodcastListSection = (): JSX.Element => {
     return podcast.edition || '';
   };
 
-  const allFilterOptions = ["All", "Singapore", "Dubai", "Sri Lanka", ...dbEditions.map(e => e.name)];
+  const getCountryCodeFromLocation = (location: string): string => {
+    const locationLower = location.toLowerCase();
+    
+    const countryCodeMap: Record<string, string> = {
+      'singapore': '🇸🇬', 'sgp': '🇸🇬',
+      'dubai': '🇦🇪', 'uae': '🇦🇪', 'united arab emirates': '🇦🇪',
+      'sri lanka': '🇱🇰', 'srilanka': '🇱🇰', 'sl': '🇱🇰', 'colombo': '🇱🇰',
+      'mumbai': '🇮🇳', 'india': '🇮🇳', 'delhi': '🇮🇳', 'bangalore': '🇮🇳',
+      'kuala lumpur': '🇲🇾', 'malaysia': '🇲🇾',
+      'bangkok': '🇹🇭', 'thailand': '🇹🇭',
+      'hong kong': '🇭🇰', 'hk': '🇭🇰',
+      'beijing': '🇨🇳', 'china': '🇨🇳', 'shanghai': '🇨🇳',
+      'tokyo': '🇯🇵', 'japan': '🇯🇵',
+      'seoul': '🇰🇷', 'korea': '🇰🇷',
+      'riyadh': '🇸🇦', 'saudi arabia': '🇸🇦',
+      'doha': '🇶🇦', 'qatar': '🇶🇦',
+      'kuwait': '🇰🇼', 'muscat': '🇴🇲', 'oman': '🇴🇲',
+      'bahrain': '🇧🇭', 'manama': '🇧🇭',
+      'london': '🇬🇧', 'uk': '🇬🇧', 'united kingdom': '🇬🇧',
+      'paris': '🇫🇷', 'france': '🇫🇷',
+      'berlin': '🇩🇪', 'germany': '🇩🇪',
+      'new york': '🇺🇸', 'usa': '🇺🇸', 'united states': '🇺🇸',
+      'los angeles': '🇺🇸', 'la': '🇺🇸', 'san francisco': '🇺🇸', 'sf': '🇺🇸',
+      'toronto': '🇨🇦', 'canada': '🇨🇦', 'vancouver': '🇨🇦',
+      'sydney': '🇦🇺', 'australia': '🇦🇺', 'melbourne': '🇦🇺',
+      'auckland': '🇳🇿', 'new zealand': '🇳🇿',
+      'johannesburg': '🇿🇦', 'south africa': '🇿🇦',
+      'nairobi': '🇰🇪', 'kenya': '🇰🇪',
+      'lagos': '🇳🇬', 'nigeria': '🇳🇬',
+      'cairo': '🇪🇬', 'egypt': '🇪🇬',
+    };
+    
+    if (countryCodeMap[locationLower]) return countryCodeMap[locationLower];
+    
+    for (const [key, code] of Object.entries(countryCodeMap)) {
+      if (locationLower.includes(key)) return code;
+    }
+    
+    return '🌍';
+  };
+
+  const hardcodedFilters = [
+    { name: "All", flag: "" },
+    { name: "Singapore", flag: "🇸🇬" },
+    { name: "Dubai", flag: "🇦🇪" },
+    { name: "Sri Lanka", flag: "🇱🇰" },
+  ];
+  const dbFilters = dbEditions.map(e => ({ 
+    name: e.location || e.name, 
+    flag: e.country_code || getCountryCodeFromLocation(e.location || e.name) 
+  }));
+  const allFilterOptions = [...hardcodedFilters, ...dbFilters];
 
   // Filter podcasts based on active tab
   const podcastData = LATEST_PODCASTS.filter(podcast => {
@@ -103,21 +189,23 @@ export const LatestPodcastListSection = (): JSX.Element => {
     if (activeFilter === "Singapore") return podcast.edition.includes("Singapore");
     if (activeFilter === "Dubai") return podcast.edition.includes("Dubai");
     if (activeFilter === "Sri Lanka") return podcast.edition.includes("Sri Lanka");
-    return getPodcastEdition(podcast).includes(activeFilter);
+    // Check if any DB edition location matches
+    const matchingDbEdition = dbEditions.find(e => 
+      (e.location || e.name) === activeFilter &&
+      (podcast.edition?.includes(e.name) || podcast.edition?.includes(e.location || e.name))
+    );
+    if (matchingDbEdition) return true;
+    return false;
   });
 
   // Combine with DB episodes
   const isHardcodedEdition = ["Singapore", "Dubai", "Sri Lanka"].includes(activeFilter);
   const isDbEditionFilter = dbEditions.some(e => 
-    createEditionSlug(e.name) === activeFilter || 
-    e.name === activeFilter ||
-    e.name.toLowerCase() === activeFilter.toLowerCase()
+    (e.location || e.name) === activeFilter
   );
   
   // Determine which podcasts to show based on filter
   let displayPodcasts: (Podcast | Episode)[] = [];
-  
-  console.log('displayPodcasts - isDbEditionFilter:', isDbEditionFilter, 'isLoadingEpisodes:', isLoadingEpisodes, 'dbEpisodes:', dbEpisodes.length, 'podcastData:', podcastData.length);
   
   if (isDbEditionFilter && isLoadingEpisodes) {
     displayPodcasts = [];
@@ -259,14 +347,21 @@ export const LatestPodcastListSection = (): JSX.Element => {
   };
 
   const handlePlayClick = (podcast: any) => {
-    const editionName = podcast.edition.includes("Singapore")
-      ? EDITION_NAMES.SINGAPORE
-      : podcast.edition.includes("Dubai")
-        ? EDITION_NAMES.DUBAI
-        : EDITION_NAMES.SRI_LANKA;
+    let editionSlug = '';
+
+    if (podcast.edition?.includes("Singapore")) {
+      editionSlug = 'singapore';
+    } else if (podcast.edition?.includes("Dubai")) {
+      editionSlug = 'dubai';
+    } else if (podcast.edition?.includes("Sri Lanka")) {
+      editionSlug = 'sri-lanka';
+    } else {
+      // For DB editions, create slug from the edition name/location
+      editionSlug = createEditionSlug(podcast.edition || '');
+    }
 
     navigate(`/episode/${podcast.id}`, {
-      state: { edition: editionName }
+      state: { edition: editionSlug }
     });
   };
 
@@ -312,15 +407,15 @@ export const LatestPodcastListSection = (): JSX.Element => {
           >
             {allFilterOptions.map((filter) => (
               <button
-                key={filter}
-                onClick={() => handleFilterChange(filter)}
-                className={`inline-flex items-center justify-center relative flex-[0_0_auto] py-2 border-b-[3px] transition-colors duration-300 ${activeFilter === filter
+                key={filter.name}
+                onClick={() => handleFilterChange(filter.name)}
+                className={`inline-flex items-center justify-center relative flex-[0_0_auto] py-2 border-b-[3px] transition-colors duration-300 ${activeFilter === filter.name
                   ? "border-[#7bb302]"
                   : "border-transparent hover:border-[#7bb302]/30"
                   }`}
               >
-                <span className={`[font-family:'Geist',Helvetica] font-medium text-sm sm:text-base tracking-[0] leading-[normal] whitespace-nowrap ${activeFilter === filter ? "text-[#7bb302]" : "text-[#8d8d8d]"}`}>
-                  {filter}
+                <span className={`[font-family:'Geist',Helvetica] font-medium text-sm sm:text-base tracking-[0] leading-[normal] whitespace-nowrap ${activeFilter === filter.name ? "text-[#7bb302]" : "text-[#8d8d8d]"}`}>
+                  {filter.flag && `${filter.flag} `}{filter.name}
                 </span>
               </button>
             ))}
@@ -367,36 +462,57 @@ export const LatestPodcastListSection = (): JSX.Element => {
                   className="relative w-[250px] sm:w-[270px] md:w-[282px] flex flex-col gap-3 md:gap-4 group flex-shrink-0 snap-start"
                 >
                   <div
-                    className="relative w-full h-[150px] sm:h-[160px] md:h-[180px] bg-black rounded-xl md:rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105 group cursor-pointer"
+                    className="relative w-full h-[150px] sm:h-[160px] md:h-[180px] bg-gray-900 rounded-xl md:rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-105 group cursor-pointer"
                     onClick={() => handlePlayClick(podcast)}
                   >
                     <div className="block w-full h-full relative">
-                      {getPodcastThumbnail(podcast) ? (
-                        <img
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                          src={getPodcastThumbnail(podcast)}
-                          alt={podcast.title}
-                        />
-                      ) : (podcast.videoUrl && (podcast.videoUrl.includes("youtube") || podcast.videoUrl.includes("youtu.be"))) ? (
-                        <img
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                          src={getYoutubeThumbnail(podcast.videoUrl)}
-                          alt={podcast.title}
-                        />
-                      ) : podcast.videoUrl ? (
-                          <video
-                            className="w-full h-full object-cover"
-                            src={`${podcast.videoUrl}#t=0.001`}
-                            preload="metadata"
-                            playsInline
-                            muted
-                          />
-                        ) : (
-                        // Fallback for episodes with no thumbnail or video
-                        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                          <span className="text-white text-sm text-center px-4">{podcast.title}</span>
-                        </div>
-                      )}
+                      {(() => {
+                        const thumbnail = getPodcastThumbnail(podcast);
+                        if (thumbnail && thumbnail.trim() !== '') {
+                          return (
+                            <img
+                              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                              src={thumbnail}
+                              alt={podcast.title}
+                              style={{ position: 'absolute', top: 0, left: 0 }}
+                              onError={(e) => {
+                                // If image fails to load, try YouTube thumbnail
+                                const target = e.target as HTMLImageElement;
+                                if (podcast.videoUrl && (String(podcast.videoUrl).includes("youtube") || String(podcast.videoUrl).includes("youtu.be"))) {
+                                  target.src = getYoutubeThumbnail(String(podcast.videoUrl));
+                                  target.onError = null;
+                                }
+                              }}
+                            />
+                          );
+                        }
+                        if (podcast.videoUrl && (String(podcast.videoUrl).includes("youtube") || String(podcast.videoUrl).includes("youtu.be"))) {
+                          return (
+                            <img
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                              src={getYoutubeThumbnail(String(podcast.videoUrl))}
+                              alt={podcast.title}
+                            />
+                          );
+                        }
+                        if (podcast.videoUrl) {
+                          return (
+                            <video
+                              className="w-full h-full object-cover"
+                              src={`${podcast.videoUrl}#t=0.001`}
+                              preload="metadata"
+                              playsInline
+                              muted
+                            />
+                          );
+                        }
+                        // Fallback - show title with colored background
+                        return (
+                          <div className="w-full h-full bg-gradient-to-br from-[#7bb302] to-[#ed2939] flex items-center justify-center">
+                            <span className="text-white text-sm text-center px-4 font-medium">{podcast.title}</span>
+                          </div>
+                        );
+                      })()}
                       <div
                         className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/50 transition-all duration-300 z-10"
                         aria-label={`Play ${podcast.title}`}
