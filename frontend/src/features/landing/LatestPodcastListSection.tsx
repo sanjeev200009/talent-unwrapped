@@ -3,16 +3,14 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { LATEST_PODCASTS } from "@/data/episodes";
 import { BackArrowIcon, NextArrowIcon, PlayIcon } from "@/components/common/Icons";
-import { EDITION_NAMES } from "@/constants/copy";
-import { fetchEditions, fetchEpisodesByEdition, fetchDbEpisodesByEdition, fetchDbEpisodes, DbEdition, Episode } from "@/services/api/client";
-import type { Podcast } from "@/types";
+import { fetchEditions, fetchDbEpisodes, DbEdition } from "@/services/api/client";
+import type { Podcast, Episode } from "@/types";
 
 export const LatestPodcastListSection = (): JSX.Element => {
   const [activeFilter, setActiveFilter] = useState("All");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dbEditions, setDbEditions] = useState<DbEdition[]>([]);
   const [dbEpisodes, setDbEpisodes] = useState<Episode[]>([]);
-  const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(false);
   const navigate = useNavigate();
   const sectionRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -28,57 +26,44 @@ export const LatestPodcastListSection = (): JSX.Element => {
   }, []);
 
   useEffect(() => {
+    let ignore = false;
     const loadDbEpisodes = async () => {
-      setIsLoadingEpisodes(true);
+      setDbEpisodes([]);
       try {
+        let episodes: Episode[] = [];
         if (activeFilter === "All") {
-          const allDbEpisodes = await fetchDbEpisodes();
-          setDbEpisodes(allDbEpisodes);
+          episodes = await fetchDbEpisodes();
         } else {
           // Find DB edition by location or name
           const dbEdition = dbEditions.find(e => 
             (e.location || e.name) === activeFilter
           );
           if (dbEdition) {
-            const dbEpisodesRaw = await fetchEpisodesByEdition(dbEdition.id);
-            const episodes = dbEpisodesRaw.map((ep: any) => {
-              // Parse images field (might be JSON string or array)
-              let images: string[] = [];
-              if (ep.images) {
-                if (Array.isArray(ep.images)) {
-                  images = ep.images;
-                } else if (typeof ep.images === 'string') {
-                  try {
-                    images = JSON.parse(ep.images);
-                  } catch {
-                    images = [];
-                  }
-                }
-              }
-              // Try multiple possible thumbnail field names
-              const thumbnail = ep.thumbnail_url || ep.thumbnailUrl || ep.thumbnail || images[0] || '';
-              return {
-                id: ep.id,
-                title: ep.title || '',
-                description: ep.description || '',
-                image: thumbnail,
-                videoUrl: ep.youtube_url || ep.videoUrl || '',
-                duration: ep.duration || '',
-                date: ep.added_date || '',
-                edition: dbEdition.location || dbEdition.name,
-                images,
-              };
-            });
-            setDbEpisodes(episodes);
-          } else {
-            setDbEpisodes([]);
+            // Use the same transformation logic as fetchDbEpisodes but filtered
+            const allEpisodes = await fetchDbEpisodes();
+            episodes = allEpisodes.filter(ep => 
+              ep.edition === dbEdition.name || 
+              ep.editionLocation === dbEdition.location
+            );
           }
         }
-      } finally {
-        setIsLoadingEpisodes(false);
+        
+        if (!ignore) {
+          // Normalize episodes to ensure all expected properties exist
+          const normalized = episodes.map(ep => ({
+            ...ep,
+            // Ensure both properties exist for compatibility
+            image: ep.image || (ep as any).thumbnailUrl || "",
+            thumbnailUrl: ep.image || (ep as any).thumbnailUrl || "",
+          }));
+          setDbEpisodes(normalized);
+        }
+      } catch (error) {
+        console.error("Error loading DB episodes:", error);
       }
     };
     loadDbEpisodes();
+    return () => { ignore = true; };
   }, [activeFilter, dbEditions]);
 
   const createEditionSlug = (name: string): string => {
@@ -89,46 +74,14 @@ export const LatestPodcastListSection = (): JSX.Element => {
       .replace(/[^a-z0-9-]/g, '');
   };
 
-  const getPodcastThumbnail = (podcast: Podcast | Episode): string => {
-    // First priority: explicit image field
-    if ('image' in podcast && typeof podcast.image === 'string' && podcast.image.trim() !== '') {
-      return podcast.image;
-    }
-    // Second priority: thumbnailUrl (hardcoded format)
-    if ('thumbnailUrl' in podcast && typeof podcast.thumbnailUrl === 'string' && podcast.thumbnailUrl.trim() !== '') {
-      return podcast.thumbnailUrl;
-    }
-    // Third priority: images array
-    if ('images' in podcast && Array.isArray(podcast.images) && podcast.images.length > 0) {
-      const firstImage = podcast.images[0];
-      if (typeof firstImage === 'string' && firstImage.trim() !== '') {
-        return firstImage;
-      }
-    }
-    // Fourth priority: YouTube thumbnail from videoUrl
-    if ('videoUrl' in podcast && podcast.videoUrl) {
-      const url = String(podcast.videoUrl);
-      try {
-        if (url.includes("youtu.be")) {
-          const videoId = url.split("youtu.be/")[1]?.split("?")[0];
-          if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-        } else if (url.includes("youtube.com/watch")) {
-          const urlObj = new URL(url);
-          const videoId = urlObj.searchParams.get("v");
-          if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-        }
-      } catch {}
-    }
-    return '';
+  const getPodcastThumbnail = (podcast: any): string => {
+    return podcast.image || podcast.thumbnailUrl || (podcast.images && podcast.images[0]) || "";
   };
 
   const getPodcastId = (podcast: Podcast | Episode): string => {
     return String(podcast.id);
   };
 
-  const getPodcastEdition = (podcast: Podcast | Episode): string => {
-    return podcast.edition || '';
-  };
 
   const getCountryCodeFromLocation = (location: string): string => {
     const locationLower = location.toLowerCase();
@@ -179,7 +132,7 @@ export const LatestPodcastListSection = (): JSX.Element => {
   ];
   const dbFilters = dbEditions.map(e => ({ 
     name: e.location || e.name, 
-    flag: e.country_code || getCountryCodeFromLocation(e.location || e.name) 
+    flag: getCountryCodeFromLocation(e.location || e.name) 
   }));
   const allFilterOptions = [...hardcodedFilters, ...dbFilters];
 
@@ -198,26 +151,9 @@ export const LatestPodcastListSection = (): JSX.Element => {
     return false;
   });
 
-  // Combine with DB episodes
-  const isHardcodedEdition = ["Singapore", "Dubai", "Sri Lanka"].includes(activeFilter);
-  const isDbEditionFilter = dbEditions.some(e => 
-    (e.location || e.name) === activeFilter
-  );
-  
   // Determine which podcasts to show based on filter
-  let displayPodcasts: (Podcast | Episode)[] = [];
-  
-  if (isDbEditionFilter && isLoadingEpisodes) {
-    displayPodcasts = [];
-  } else if (activeFilter === "All") {
-    displayPodcasts = [...podcastData, ...dbEpisodes];
-  } else if (isHardcodedEdition) {
-    displayPodcasts = podcastData;
-  } else if (isDbEditionFilter) {
-    displayPodcasts = dbEpisodes;
-  } else {
-    displayPodcasts = podcastData;
-  }
+  // Both podcastData (filtered hardcoded) and dbEpisodes (filtered DB) should be shown
+  const displayPodcasts: (Podcast | Episode)[] = [...podcastData, ...dbEpisodes];
 
   const ITEMS_PER_PAGE = 5;
   const totalPages = Math.ceil(displayPodcasts.length / ITEMS_PER_PAGE);
@@ -451,8 +387,7 @@ export const LatestPodcastListSection = (): JSX.Element => {
               key={activeFilter}
               variants={containerVariants}
               initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-50px" }}
+              animate="visible"
               className="flex gap-4 sm:gap-5 md:gap-6"
             >
               {displayPodcasts.map((podcast) => (
@@ -480,7 +415,7 @@ export const LatestPodcastListSection = (): JSX.Element => {
                                 const target = e.target as HTMLImageElement;
                                 if (podcast.videoUrl && (String(podcast.videoUrl).includes("youtube") || String(podcast.videoUrl).includes("youtu.be"))) {
                                   target.src = getYoutubeThumbnail(String(podcast.videoUrl));
-                                  target.onError = null;
+                                  target.onerror = null;
                                 }
                               }}
                             />

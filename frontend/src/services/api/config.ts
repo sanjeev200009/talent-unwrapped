@@ -10,11 +10,9 @@ export const API_CONFIG = {
   // API Endpoints
   ENDPOINTS: {
     // Podcast endpoints
-    PODCASTS: "/podcasts",
-    PODCAST_DETAIL: (id: string | number) => `/podcasts/${id}`,
-    PODCAST_SEARCH: "/podcasts/search",
-    EPISODES: "/episodes",
-    EPISODE_DETAIL: (id: string | number) => `/episodes/${id}`,
+    PODCASTS: "/api/episodes", // Redirecting to episodes as podcasts seem obsolete
+    PODCAST_DETAIL: (id: string | number) => `/api/episodes/${id}`,
+    PODCAST_SEARCH: "/api/episodes/search",
 
     // Contact endpoints
     CONTACT_SUBMIT: "/contact",
